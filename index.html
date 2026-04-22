@@ -246,9 +246,9 @@ tr:hover td{background:rgba(255,255,255,.012)}
     <div class="lt">Sign in</div>
     <div class="ls">Enter your work email and PIN</div>
     <label class="fl">Work email</label>
-    <input type="email" class="fi" id="loginEmail" placeholder="yourname@myeg.com.my" onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()">
+    <input type="email" class="fi" id="loginEmail" placeholder="yourname@myeg.com.my" oninput="this.style.borderColor='';document.getElementById('loginError').textContent=''" onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()">
     <label class="fl">PIN</label>
-    <input type="password" class="fi" id="loginPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono);font-size:20px" oninput="if(this.value.length===4)tryLogin()" onkeydown="if(event.key==='Enter')tryLogin()">
+    <input type="password" class="fi" id="loginPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono);font-size:20px" oninput="this.style.borderColor='';document.getElementById('loginError').textContent=''" onkeydown="if(event.key==='Enter')tryLogin()">
     <button class="btn-p" onclick="tryLogin()">Sign in →</button>
     <div class="lerr" id="loginError"></div>
   </div>
@@ -515,7 +515,9 @@ function roleName() {
 // ══════════════════════════════════
 async function init() {
   const saved = sessionStorage.getItem('ba_user');
-  if (saved) { CU = JSON.parse(saved); await loadBase(); showApp(); }
+  const justLoggedOut = sessionStorage.getItem('logged_out');
+  if (saved && !justLoggedOut) { CU = JSON.parse(saved); await loadBase(); showApp(); }
+  sessionStorage.removeItem('logged_out');
 }
 
 async function loadBase() {
@@ -533,16 +535,55 @@ async function loadBase() {
 }
 
 async function tryLogin() {
-  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const pin = document.getElementById('loginPin').value.trim();
+  const emailEl = document.getElementById('loginEmail');
+  const pinEl = document.getElementById('loginPin');
+  const email = emailEl.value.trim().toLowerCase();
+  const pin = pinEl.value.trim();
   const err = document.getElementById('loginError');
   err.textContent = '';
-  if (!email || !pin) { err.textContent = 'Enter email and PIN.'; return; }
+
+  // Field validation
+  if (!email && !pin) {
+    err.textContent = 'Email and PIN are required.';
+    emailEl.style.borderColor = 'var(--red)';
+    pinEl.style.borderColor = 'var(--red)';
+    return;
+  }
+  if (!email) {
+    err.textContent = 'Work email is required.';
+    emailEl.style.borderColor = 'var(--red)';
+    emailEl.focus();
+    return;
+  }
+  if (!email.includes('@')) {
+    err.textContent = 'Please enter a valid email address.';
+    emailEl.style.borderColor = 'var(--red)';
+    emailEl.focus();
+    return;
+  }
+  if (!pin) {
+    err.textContent = 'PIN is required.';
+    pinEl.style.borderColor = 'var(--red)';
+    pinEl.focus();
+    return;
+  }
+  if (pin.length < 4) {
+    err.textContent = 'PIN must be 4 digits.';
+    pinEl.style.borderColor = 'var(--red)';
+    pinEl.focus();
+    return;
+  }
+
+  // Reset border colors
+  emailEl.style.borderColor = '';
+  pinEl.style.borderColor = '';
+
   const { data: users } = await sb.from('users').select('*').ilike('email', email);
-  if (!users?.length) { err.textContent = 'Email not found. Check with your manager.'; return; }
+  if (!users?.length) { err.textContent = 'Email not found. Check with your manager.'; emailEl.style.borderColor = 'var(--red)'; return; }
   const user = users[0];
   if (pin !== user.pin_hash) {
     err.textContent = 'Incorrect PIN.';
+    pinEl.style.borderColor = 'var(--red)';
     document.getElementById('loginPin').value = '';
     return;
   }
@@ -552,7 +593,11 @@ async function tryLogin() {
   showApp();
 }
 
-function logout() { sessionStorage.removeItem('ba_user'); location.reload(); }
+function logout() {
+  sessionStorage.removeItem('ba_user');
+  sessionStorage.setItem('logged_out', '1');
+  location.reload();
+}
 
 // ══════════════════════════════════
 // APP SHELL
