@@ -1,0 +1,2012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BA Task Manager</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0c0f;--surface:#15151a;--surface2:#1c1c22;--surface3:#23232b;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--border3:rgba(255,255,255,0.18);
+  --text:#eeeef2;--text2:#8888a0;--text3:#55556a;
+  --accent:#7c6cfa;--accent2:#5a4de0;--ag:rgba(124,108,250,0.15);
+  --green:#3ecf8e;--gbg:rgba(62,207,142,0.1);
+  --amber:#f6a623;--abg:rgba(246,166,35,0.1);
+  --red:#f56565;--rbg:rgba(245,101,101,0.1);
+  --blue:#4da6ff;--bbg:rgba(77,166,255,0.1);
+  --gray:rgba(144,144,160,0.1);
+  --r:10px;--rs:6px;--rl:14px;--rxl:18px;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --sb:228px;--t:0.15s ease;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh}
+button{font-family:var(--font);cursor:pointer}
+input,select,textarea{font-family:var(--font)}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse 70% 60% at 50% -5%,rgba(124,108,250,0.12),transparent)}
+.lbox{width:380px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--rxl);padding:2.5rem}
+.llo{display:flex;align-items:center;gap:10px;margin-bottom:2rem}
+.llo-icon{width:34px;height:34px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+.llo-text{font-size:14px;font-weight:600}
+.llo-sub{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.lt{font-size:21px;font-weight:600;margin-bottom:4px;letter-spacing:-0.5px}
+.ls{font-size:13px;color:var(--text2);margin-bottom:1.5rem}
+.fl{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;display:block}
+.fi{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rs);padding:9px 11px;color:var(--text);font-size:14px;outline:none;transition:border-color var(--t);margin-bottom:.85rem}
+.fi:focus{border-color:var(--accent)}
+.btn-p{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-size:14px;font-weight:500;cursor:pointer;transition:background var(--t),transform .1s}
+.btn-p:hover{background:var(--accent2)}
+.btn-p:active{transform:scale(.98)}
+.lerr{font-size:12px;color:var(--red);margin-top:6px;min-height:16px}
+#app{display:none;min-height:100vh}
+#app.visible{display:flex}
+.sidebar{width:var(--sb);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sbh{padding:.95rem .85rem;border-bottom:1px solid var(--border)}
+.sblogo{display:flex;align-items:center;gap:7px}
+.sbli{width:26px;height:26px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+.sblt{font-size:13px;font-weight:600}
+.sbu{margin-top:7px;padding:6px 8px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border)}
+.sbun{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbur{font-size:9.5px;color:var(--text3);font-family:var(--mono)}
+.sbnav{flex:1;padding:.35rem 0;overflow-y:auto}
+.ns{padding:0 .5rem;margin-bottom:.1rem}
+.nsl{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:5px 8px 2px}
+.ni{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:var(--rs);cursor:pointer;color:var(--text2);font-size:12px;font-weight:500;transition:all var(--t);margin-bottom:1px;border:none;background:none;width:100%;text-align:left}
+.ni:hover{background:var(--surface2);color:var(--text)}
+.ni.active{background:var(--ag);color:var(--accent)}
+.niico{width:13px;height:13px;flex-shrink:0;opacity:.65}
+.ni.active .niico{opacity:1}
+.sbfoot{padding:.5rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:3px}
+.sbfb{padding:5px 8px;background:transparent;border:1px solid var(--border2);border-radius:var(--rs);color:var(--text2);font-size:11px;cursor:pointer;transition:all var(--t);text-align:left}
+.sbfb:hover{background:var(--surface2);color:var(--text)}
+.main{margin-left:var(--sb);flex:1;padding:1.75rem;overflow-x:hidden;min-width:0}
+.page{display:none}
+.page.active{display:block}
+.ph{margin-bottom:1.3rem}
+.pt{font-size:21px;font-weight:600;letter-spacing:-0.5px;margin-bottom:2px}
+.ps{font-size:13px;color:var(--text2)}
+.phr{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:1.3rem;flex-wrap:wrap}
+.mrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;margin-bottom:1.3rem}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:.8rem .95rem}
+.mv{font-size:23px;font-weight:600;letter-spacing:-1px;font-family:var(--mono)}
+.ml{font-size:11px;color:var(--text2);margin-top:2px}
+.mc.al .mv{color:var(--red)}
+.mc.wn .mv{color:var(--amber)}
+.mc.gd .mv{color:var(--green)}
+.mc.ac .mv{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.05rem;margin-bottom:1.05rem}
+.ct{font-size:13px;font-weight:600;margin-bottom:.85rem;display:flex;align-items:center;gap:6px}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:500}
+.b-todo{background:var(--bbg);color:var(--blue)}
+.b-ip{background:var(--gbg);color:var(--green)}
+.b-pending{background:var(--abg);color:var(--amber)}
+.b-hold{background:var(--gray);color:var(--text2)}
+.b-done{background:rgba(62,207,142,.08);color:#2ea870}
+.b-cancelled{background:var(--rbg);color:var(--red)}
+.b-pass{background:var(--gbg);color:var(--green)}
+.b-rework{background:var(--rbg);color:var(--red)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:5px 8px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
+td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.012)}
+.btn{padding:6px 12px;border-radius:var(--rs);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--t);border:1px solid transparent}
+.btn-a{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-a:hover{background:var(--accent2)}
+.btn-g{background:transparent;color:var(--text2);border-color:var(--border2)}
+.btn-g:hover{background:var(--surface2);color:var(--text)}
+.btn-d{background:var(--rbg);color:var(--red)}
+.btn-d:hover{background:rgba(245,101,101,.2)}
+.btn-sm{padding:3px 8px;font-size:11px}
+.bic{padding:4px;border-radius:var(--rs);background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;font-size:12px;transition:all var(--t)}
+.bic:hover{background:var(--surface2);color:var(--text);border-color:var(--border2)}
+.ar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.85rem}
+.fc{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all var(--t)}
+.fc:hover{border-color:var(--border2);color:var(--text)}
+.fc.active{background:var(--ag);border-color:var(--accent);color:var(--accent)}
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;align-items:center;justify-content:center;padding:1rem}
+.mo.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--rl);width:560px;max-width:100%;max-height:92vh;overflow-y:auto}
+.mh{padding:.95rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.mtt{font-size:14px;font-weight:600}
+.mb{padding:.95rem 1.25rem}
+.mf{padding:.8rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:flex-end}
+.mx{background:none;border:none;color:var(--text2);cursor:pointer;font-size:17px;line-height:1;padding:2px;transition:color var(--t)}
+.mx:hover{color:var(--text)}
+.ff{margin-bottom:.75rem}
+.flb{font-size:10.5px;font-weight:500;color:var(--text2);margin-bottom:3px;display:block;text-transform:uppercase;letter-spacing:.04em}
+.flb .opt{font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0}
+.finp,.fsel,.fta{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rs);padding:7px 10px;color:var(--text);font-size:12.5px;outline:none;transition:border-color var(--t);font-family:var(--font)}
+.finp:focus,.fsel:focus,.fta:focus{border-color:var(--accent)}
+.fsel option{background:var(--surface2)}
+.fta{resize:vertical;min-height:56px}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fhint{font-size:10px;color:var(--text3);margin-top:2px}
+/* WORKLOAD */
+.wlrow{margin-bottom:9px}
+.wln{font-size:12px;font-weight:500;margin-bottom:3px;display:flex;align-items:center;justify-content:space-between}
+.wlbg{height:9px;background:var(--surface3);border-radius:5px;overflow:hidden}
+.wlfill{height:100%;border-radius:5px;transition:width .5s}
+.wl-avail{background:var(--gbg);color:var(--green);padding:1px 6px;border-radius:10px;font-size:9.5px;font-weight:600}
+.wl-bal{background:var(--bbg);color:var(--blue);padding:1px 6px;border-radius:10px;font-size:9.5px;font-weight:600}
+.wl-busy{background:var(--abg);color:var(--amber);padding:1px 6px;border-radius:10px;font-size:9.5px;font-weight:600}
+.wl-over{background:var(--rbg);color:var(--red);padding:1px 6px;border-radius:10px;font-size:9.5px;font-weight:600}
+/* AI */
+.aipanel{background:linear-gradient(135deg,rgba(124,108,250,0.07),rgba(77,166,255,0.04));border:1px solid rgba(124,108,250,0.18);border-radius:var(--rl);padding:1rem;margin-bottom:1.1rem}
+.aih{display:flex;align-items:center;gap:7px;margin-bottom:.75rem}
+.aidot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+.ait{font-size:13px;font-weight:600;color:var(--accent)}
+.aiins{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid rgba(124,108,250,.08)}
+.aiins:last-child{border-bottom:none}
+.aiico{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;margin-top:1px}
+.aitext{font-size:12px;line-height:1.45;color:var(--text2)}
+.aitext strong{color:var(--text);font-weight:500}
+.chat-msgs{display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto;padding:2px 0;margin-bottom:9px}
+.cm{display:flex;gap:7px;align-items:flex-start}
+.cm.u{flex-direction:row-reverse}
+.cb{padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5;max-width:84%}
+.cm.u .cb{background:var(--accent);color:#fff;border-radius:10px 10px 2px 10px}
+.cm.ai .cb{background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:10px 10px 10px 2px}
+.cav{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;margin-top:2px}
+.cir{display:flex;gap:6px}
+.cinp{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rs);padding:8px 10px;color:var(--text);font-size:12.5px;outline:none;transition:border-color var(--t)}
+.cinp:focus{border-color:var(--accent)}
+.tdot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--text3);animation:blink 1.2s infinite}
+.tdot:nth-child(2){animation-delay:.2s}
+.tdot:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+/* IMPORT */
+.izn{border:2px dashed var(--border2);border-radius:var(--r);padding:1.8rem;text-align:center;cursor:pointer;transition:all var(--t);margin-bottom:.9rem}
+.izn:hover,.izn.drag{border-color:var(--accent);background:var(--ag)}
+.izt{font-size:13px;color:var(--text2)}
+.izs{font-size:11px;color:var(--text3);margin-top:2px}
+/* PERMISSIONS */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:5px}
+.pi{display:flex;align-items:center;gap:7px;padding:6px 9px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border);cursor:pointer;transition:all var(--t)}
+.pi:hover{border-color:var(--border2)}
+.pi.ck{background:var(--ag);border-color:rgba(124,108,250,.3)}
+.pcb{width:13px;height:13px;border-radius:3px;border:1px solid var(--border2);background:var(--surface3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;transition:all var(--t)}
+.pi.ck .pcb{background:var(--accent);border-color:var(--accent);color:#fff}
+.plb{font-size:11px;color:var(--text2)}
+.pi.ck .plb{color:var(--text)}
+/* BA Cards */
+.bagrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;margin-bottom:1.1rem}
+.bacard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:.85rem;cursor:pointer;transition:border-color var(--t)}
+.bacard:hover{border-color:var(--border2)}
+.bacard.sel{border-color:var(--accent);background:var(--ag)}
+.basbr{display:flex;height:4px;border-radius:2px;overflow:hidden;gap:1px;margin:5px 0}
+.sbs{display:flex;gap:3px;flex-wrap:wrap}
+.sb2{padding:1px 6px;border-radius:10px;font-size:10px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all var(--t);background:var(--surface3);color:var(--text2)}
+.sb2:hover{border-color:var(--border2);color:var(--text)}
+.sb2.s-todo{background:var(--bbg);color:var(--blue)}
+.sb2.s-ip{background:var(--gbg);color:var(--green)}
+.sb2.s-pending{background:var(--abg);color:var(--amber)}
+.sb2.s-hold{background:var(--gray);color:var(--text2)}
+.sb2.s-done{background:rgba(62,207,142,.08);color:#2ea870}
+.sb2.s-cancelled{background:var(--rbg);color:var(--red)}
+.es{text-align:center;padding:2.5rem 1rem;color:var(--text3)}
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px 13px;font-size:12px;transform:translateY(20px);opacity:0;transition:all .2s;pointer-events:none;max-width:270px}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{border-color:var(--green);color:var(--green)}
+#toast.error{border-color:var(--red);color:var(--red)}
+.sp{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lov{display:flex;align-items:center;justify-content:center;padding:2.5rem}
+.si{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:6px 9px;color:var(--text);font-size:12px;outline:none;transition:border-color var(--t)}
+.si:focus{border-color:var(--accent)}
+.fp{display:inline-flex;padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:600;font-family:var(--mono)}
+.fpl{background:var(--rbg);color:var(--red)}
+.fpe{background:var(--gbg);color:var(--green)}
+.divl{border:none;border-top:1px solid var(--border);margin:.85rem 0}
+.user-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
+.user-row:last-child{border-bottom:none}
+.uav{width:30px;height:30px;border-radius:50%;background:var(--ag);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
+.role-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
+.role-row:last-child{border-bottom:none}
+
+/* REMARKS */
+.remarks-panel{background:var(--surface2);border-radius:var(--rs);padding:.75rem;margin-top:6px}
+.remark-entry{padding:7px 0;border-bottom:1px solid var(--border)}
+.remark-entry:last-child{border-bottom:none}
+.remark-author{font-size:10.5px;font-weight:600;color:var(--accent)}
+.remark-time{font-size:9.5px;color:var(--text3);font-family:var(--mono);margin-left:6px}
+.remark-text{font-size:12px;color:var(--text2);margin-top:2px;line-height:1.45}
+.remark-input-row{display:flex;gap:6px;margin-top:8px}
+.remark-input{flex:1;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--rs);padding:6px 9px;color:var(--text);font-size:12px;outline:none;transition:border-color var(--t)}
+.remark-input:focus{border-color:var(--accent)}
+/* LOCKED TASK */
+.task-locked{opacity:.55}
+.lock-badge{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;font-family:var(--mono);background:var(--surface3);color:var(--text3);padding:1px 6px;border-radius:3px}
+/* ANALYTICS */
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1rem;margin-bottom:1rem}
+.chart-title{font-size:12.5px;font-weight:600;color:var(--text2);margin-bottom:.75rem}
+.chart-wrap{position:relative;width:100%}
+.date-range-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;padding:.85rem 1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+.date-lbl{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen">
+  <div class="lbox">
+    <div class="llo">
+      <div class="llo-icon">BA</div>
+      <div><div class="llo-text">Task Manager</div><div class="llo-sub">myeg · ba team</div></div>
+    </div>
+    <div class="lt">Sign in</div>
+    <div class="ls">Enter your work email and PIN</div>
+    <label class="fl">Work email</label>
+    <input type="email" class="fi" id="loginEmail" placeholder="yourname@myeg.com.my" onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()">
+    <label class="fl">PIN</label>
+    <input type="password" class="fi" id="loginPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono);font-size:20px" oninput="if(this.value.length===4)tryLogin()" onkeydown="if(event.key==='Enter')tryLogin()">
+    <button class="btn-p" onclick="tryLogin()">Sign in →</button>
+    <div class="lerr" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+  <div class="sidebar">
+    <div class="sbh">
+      <div class="sblogo"><div class="sbli">BA</div><div class="sblt">Task Manager</div></div>
+      <div class="sbu" style="margin-top:7px">
+        <div class="sbun" id="sbName">—</div>
+        <div class="sbur" id="sbRole">—</div>
+      </div>
+    </div>
+    <nav class="sbnav" id="sbnav"></nav>
+    <div class="sbfoot">
+      <button class="sbfb" onclick="openChangePIN()">&#128274; Change PIN</button>
+      <button class="sbfb" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+  <main class="main">
+    <div id="pageMyTasks" class="page"></div>
+    <div id="pageMyKPI" class="page"></div>
+    <div id="pageTeamBoard" class="page"></div>
+    <div id="pageProjects" class="page"></div>
+    <div id="pageDashboard" class="page"></div>
+    <div id="pageWorkload" class="page"></div>
+    <div id="pageAIAdvisor" class="page"></div>
+    <div id="pageAllTasks" class="page"></div>
+    <div id="pageAuditLog" class="page"></div>
+    <div id="pageKPI" class="page"></div>
+    <div id="pageImport" class="page"></div>
+    <div id="pageRoles" class="page"></div>
+    <div id="pageAdmin" class="page"></div>
+    <div id="pageAnalytics" class="page"></div>
+  </main>
+</div>
+
+<!-- ═══ TASK MODAL ═══ -->
+<div class="mo" id="taskModal">
+  <div class="modal">
+    <div class="mh"><div class="mtt" id="taskModalTitle">Add task</div><button class="mx" onclick="CM('taskModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="tId"><input type="hidden" id="tBaId"><input type="hidden" id="tProjId">
+      <div class="fr2">
+        <div class="ff"><label class="flb">Assigned to</label><select class="fsel" id="tAssignee" onchange="onAssigneeChange()"></select></div>
+        <div class="ff"><label class="flb">Project</label><select class="fsel" id="tProjSel" onchange="document.getElementById('tProjId').value=this.value"></select></div>
+      </div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">Task type</label><select class="fsel" id="tType" onchange="chkReview()">
+          <option>Requirement Gathering</option><option>Gap Analysis</option><option>Market Research</option>
+          <option>Mockup/Wireframe</option><option>User Story Doc</option><option>CR Addendum Doc</option>
+          <option>Development Support</option><option>App Testing</option><option>User Guide Doc</option>
+          <option>UAT Script</option><option>UAT Session</option><option>Training</option>
+          <option>Google Analytics</option><option>Production Verification</option><option>Production Support</option>
+          <option>Meeting/Discussion</option><option>Process Flow</option><option>Demo</option>
+          <option>Review UI</option><option>Review Doc</option><option>Others</option>
+        </select></div>
+        <div class="ff"><label class="flb">Status</label><select class="fsel" id="tStatus">
+          <option>To Do</option><option>In Progress</option><option>Pending</option><option>On Hold</option><option>Completed</option><option>Cancelled</option>
+        </select></div>
+      </div>
+      <div class="ff"><label class="flb">Description</label><input type="text" class="finp" id="tDesc" placeholder="Brief description"></div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">ETA</label><input type="date" class="finp" id="tEta"></div>
+        <div class="ff" id="reviewFF" style="display:none"><label class="flb">Review result</label>
+          <select class="fsel" id="tReview"><option value="">— Not reviewed —</option><option value="Pass">Pass</option><option value="Rework">Rework</option></select>
+        </div>
+      </div>
+      <div class="ff"><label class="flb">Remarks <span class="opt">(optional)</span></label><textarea class="fta" id="tRemarks" placeholder="Blockers, notes..."></textarea></div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('taskModal')">Cancel</button><button class="btn btn-a" onclick="saveTask()" id="saveTaskBtn">Save task</button></div>
+  </div>
+</div>
+
+<!-- ═══ PROJECT MODAL ═══ -->
+<div class="mo" id="projModal">
+  <div class="modal" style="width:600px">
+    <div class="mh"><div class="mtt" id="projModalTitle">Add project</div><button class="mx" onclick="CM('projModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="pId">
+      <div class="ff"><label class="flb">Project / Application name</label><input type="text" class="finp" id="pName" placeholder="e.g. JMYR Admin Portal"></div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">Project status</label><select class="fsel" id="pStatus">
+          <option>Active CR</option><option>In Progress</option><option>On Hold</option><option>Maintenance</option><option>Cancelled</option><option>Completed</option>
+        </select></div>
+        <div class="ff"><label class="flb">Assigned BA</label><select class="fsel" id="pBA"></select></div>
+      </div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">Secondary BA <span class="opt">(opt)</span></label><select class="fsel" id="pBA2"></select></div>
+        <div class="ff"><label class="flb">Supervising BA <span class="opt">(opt)</span></label><select class="fsel" id="pBASup"></select></div>
+      </div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">Project Manager <span class="opt">(opt)</span></label><input type="text" class="finp" id="pPM" placeholder="PM name"></div>
+        <div class="ff"><label class="flb">Business Owner <span class="opt">(opt)</span></label><input type="text" class="finp" id="pOwner" placeholder="Business owner"></div>
+      </div>
+      <div class="ff"><label class="flb">Jira Board URL <span class="opt">(opt)</span></label><input type="url" class="finp" id="pJira" placeholder="https://jira.myeg.com.my/..."></div>
+      <div class="ff"><label class="flb">Description <span class="opt">(opt)</span></label><textarea class="fta" id="pDesc" placeholder="Brief project description..."></textarea></div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('projModal')">Cancel</button><button class="btn btn-a" onclick="saveProject()">Save project</button></div>
+  </div>
+</div>
+
+<!-- ═══ ROLE MODAL ═══ -->
+<div class="mo" id="roleModal">
+  <div class="modal" style="width:640px">
+    <div class="mh"><div class="mtt" id="roleModalTitle">Create role</div><button class="mx" onclick="CM('roleModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="rId">
+      <div class="ff"><label class="flb">Role name</label><input type="text" class="finp" id="rName" placeholder="e.g. Senior BA"></div>
+      <div class="ff"><label class="flb">Permissions</label>
+        <div class="pgrid" id="permGrid"></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('roleModal')">Cancel</button><button class="btn btn-a" onclick="saveRole()">Save role</button></div>
+  </div>
+</div>
+
+<!-- ═══ USER MODAL ═══ -->
+<div class="mo" id="userModal">
+  <div class="modal" style="width:420px">
+    <div class="mh"><div class="mtt" id="userModalTitle">Add member</div><button class="mx" onclick="CM('userModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="uId">
+      <div class="ff"><label class="flb">Full name</label><input type="text" class="finp" id="uName" placeholder="e.g. Shahidah"></div>
+      <div class="ff"><label class="flb">Work email</label><input type="email" class="finp" id="uEmail" placeholder="shahidah@myeg.com.my"></div>
+      <div class="fr2">
+        <div class="ff"><label class="flb">PIN (4 digits)</label><input type="password" class="finp" id="uPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono)">
+          <div class="fhint" id="pinHint">Required for new accounts</div></div>
+        <div class="ff"><label class="flb">Role</label><select class="fsel" id="uRoleId"></select></div>
+      </div>
+      <div class="ff"><label class="flb">Monthly US doc target</label><input type="number" class="finp" id="uTarget" value="4" min="1" max="30">
+        <div class="fhint">KPI volume target</div></div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('userModal')">Cancel</button><button class="btn btn-a" onclick="saveUser()">Save</button></div>
+  </div>
+</div>
+
+<!-- ═══ CHANGE PIN ═══ -->
+<div class="mo" id="pinModal">
+  <div class="modal" style="width:340px">
+    <div class="mh"><div class="mtt">Change my PIN</div><button class="mx" onclick="CM('pinModal')">✕</button></div>
+    <div class="mb">
+      <div class="ff"><label class="flb">Current PIN</label><input type="password" class="finp" id="curPin" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div class="ff"><label class="flb">New PIN</label><input type="password" class="finp" id="newPin1" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div class="ff"><label class="flb">Confirm new PIN</label><input type="password" class="finp" id="newPin2" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div id="pinErr" style="font-size:11px;color:var(--red);min-height:14px"></div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('pinModal')">Cancel</button><button class="btn btn-a" onclick="savePin()">Update PIN</button></div>
+  </div>
+</div>
+
+<!-- ═══ IMPORT MODAL ═══ -->
+<div class="mo" id="importModal">
+  <div class="modal" style="width:680px">
+    <div class="mh"><div class="mtt" id="importModalTitle">Import data</div><button class="mx" onclick="CM('importModal')">✕</button></div>
+    <div class="mb">
+      <div class="ar" style="margin-bottom:1rem">
+        <button class="fc active" onclick="setImportType(this,'projects')">Projects</button>
+        <button class="fc" onclick="setImportType(this,'tasks')">Tasks</button>
+      </div>
+      <div id="importGuide"></div>
+      <div class="izn" id="importZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <div style="font-size:26px;opacity:.4;margin-bottom:.5rem">⬆</div>
+        <div class="izt">Click to upload or drag & drop your Excel file</div>
+        <div class="izs">Accepted: .xlsx · Max 5MB</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none" onchange="handleFile(this.files[0])">
+      <div id="importPreview"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="CM('importModal')">Cancel</button>
+      <button class="btn btn-g" onclick="downloadTemplate()" id="dlTplBtn">⬇ Download template</button>
+      <button class="btn btn-a" onclick="confirmImport()" id="confirmImportBtn" style="display:none">Import data</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════
+// CONFIG
+// ══════════════════════════════════
+const SUPABASE_URL = 'https://zerezgqzwpkjjwmitvkq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplcmV6Z3F6d3Bramp3bWl0dmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzM2MDgsImV4cCI6MjA5MjQ0OTYwOH0.Vzv3TA2E7C7p5ZQd22GOUj8ak4r38XUkF0aUt9WUSTQ';
+const ANTHROPIC_KEY = 'YOUR_ANTHROPIC_API_KEY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ══════════════════════════════════
+// STATE
+// ══════════════════════════════════
+let CU = null; // current user
+let AU = []; // all users
+let AP = []; // all projects
+let AR = []; // all roles
+let WS = {}; // workload settings
+let CP = ''; // current page
+let importType = 'projects';
+let importRows = [];
+let chatHistory = [];
+
+const TASK_TYPES = ['Requirement Gathering','Gap Analysis','Market Research','Mockup/Wireframe','User Story Doc','CR Addendum Doc','Development Support','App Testing','User Guide Doc','UAT Script','UAT Session','Training','Google Analytics','Production Verification','Production Support','Meeting/Discussion','Process Flow','Demo','Review UI','Review Doc','Others'];
+const DOC_TYPES = ['User Story Doc','CR Addendum Doc'];
+const TASK_STATUSES = ['To Do','In Progress','Pending','On Hold','Completed','Cancelled'];
+const PROJ_STATUSES = ['Active CR','In Progress','On Hold','Maintenance','Cancelled','Completed'];
+const ALL_PERMS = [
+  {key:'view_dashboard',label:'View dashboard'},
+  {key:'view_all_tasks',label:'View all tasks'},
+  {key:'view_kpi_all',label:'View all KPIs'},
+  {key:'view_kpi_own',label:'View own KPI'},
+  {key:'create_task_own',label:'Create own tasks'},
+  {key:'create_task_any',label:'Create tasks for anyone'},
+  {key:'edit_task_own',label:'Edit own tasks'},
+  {key:'edit_task_any',label:'Edit any task'},
+  {key:'delete_task',label:'Delete tasks'},
+  {key:'create_project',label:'Create projects'},
+  {key:'edit_project',label:'Edit projects'},
+  {key:'delete_project',label:'Delete projects'},
+  {key:'manage_users',label:'Manage users'},
+  {key:'manage_roles',label:'Manage roles'},
+  {key:'view_audit_log',label:'View audit log'},
+  {key:'mark_review_result',label:'Mark review results'},
+  {key:'view_team_board',label:'View team board'},
+  {key:'use_ai_advisor',label:'Use AI advisor'},
+  {key:'import_data',label:'Import data'},
+  {key:'view_workload',label:'View workload radar'},
+  {key:'override_completed_task',label:'Override completed tasks'},
+];
+
+// Workload complexity weights
+const W_WEIGHTS = {
+  'User Story Doc':3,'Requirement Gathering':3,'UAT Script':3,'User Guide Doc':3,
+  'App Testing':2,'Development Support':2,'CR Addendum Doc':2,'Gap Analysis':2,
+};
+const W_DEFAULT = 1;
+
+// ══════════════════════════════════
+// PERMISSION HELPERS
+// ══════════════════════════════════
+function userPerms() {
+  if (!CU) return [];
+  const role = AR.find(r => r.id === CU.role_id);
+  if (!role) {
+    // fallback to legacy role field
+    const legacyMap = {
+      manager: ALL_PERMS.map(p=>p.key), // all perms
+      assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','create_project','edit_project','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload'],
+      ba: ['view_kpi_own','create_task_own','edit_task_own','view_team_board'],
+    };
+    return legacyMap[CU.role] || ['view_kpi_own','create_task_own','edit_task_own','view_team_board'];
+  }
+  return Array.isArray(role.permissions) ? role.permissions : [];
+}
+function can(perm) { return userPerms().includes(perm); }
+function roleName() {
+  const r = AR.find(x => x.id === CU.role_id);
+  return r ? r.name : (CU.role || 'BA');
+}
+
+// ══════════════════════════════════
+// INIT & LOGIN
+// ══════════════════════════════════
+async function init() {
+  const saved = sessionStorage.getItem('ba_user');
+  if (saved) { CU = JSON.parse(saved); await loadBase(); showApp(); }
+}
+
+async function loadBase() {
+  const [u, p, r, ws] = await Promise.all([
+    sb.from('users').select('*').order('name'),
+    sb.from('projects').select('*').order('name'),
+    sb.from('roles').select('*').order('name'),
+    sb.from('workload_settings').select('*'),
+  ]);
+  AU = u.data || [];
+  AP = p.data || [];
+  AR = r.data || [];
+  WS = {};
+  (ws.data||[]).forEach(s => WS[s.key] = s.value);
+}
+
+async function tryLogin() {
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const pin = document.getElementById('loginPin').value.trim();
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  if (!email || !pin) { err.textContent = 'Enter email and PIN.'; return; }
+  const { data: users } = await sb.from('users').select('*').ilike('email', email);
+  if (!users?.length) { err.textContent = 'Email not found. Check with your manager.'; return; }
+  const user = users[0];
+  if (pin !== user.pin_hash) {
+    err.textContent = 'Incorrect PIN.';
+    document.getElementById('loginPin').value = '';
+    return;
+  }
+  CU = user;
+  sessionStorage.setItem('ba_user', JSON.stringify(user));
+  await loadBase();
+  showApp();
+}
+
+function logout() { sessionStorage.removeItem('ba_user'); location.reload(); }
+
+// ══════════════════════════════════
+// APP SHELL
+// ══════════════════════════════════
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('sbName').textContent = CU.name;
+  document.getElementById('sbRole').textContent = roleName();
+  buildNav();
+  // default first page
+  if (can('view_dashboard')) navigateTo('Dashboard');
+  else navigateTo('MyTasks');
+}
+
+function niBtn(page, path, label) {
+  return `<button class="ni" onclick="navigateTo('${page}')" data-page="${page}">
+    <svg class="niico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">${path}</svg>${label}
+  </button>`;
+}
+
+function buildNav() {
+  const nav = document.getElementById('sbnav');
+  let html = '';
+  // Overview section (manager/AM)
+  if (can('view_dashboard') || can('view_kpi_all') || can('view_all_tasks') || can('view_audit_log') || can('view_workload') || can('use_ai_advisor')) {
+    html += `<div class="ns"><div class="nsl">Overview</div>`;
+    if (can('view_dashboard')) html += niBtn('Dashboard','<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>','Dashboard');
+    if (can('view_workload')) html += niBtn('Workload','<circle cx="8" cy="8" r="6"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="11" y1="6" x2="8" y2="8"/>','Workload radar');
+    if (can('use_ai_advisor')) html += niBtn('AIAdvisor','<path d="M2 4h12v7a2 2 0 01-2 2H4a2 2 0 01-2-2V4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/>','AI advisor');
+    if (can('view_kpi_all')) html += niBtn('KPI','<polyline points="1,11 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>','KPI scores');
+    if (can('view_all_tasks')) html += niBtn('AllTasks','<line x1="3" y1="4" x2="13" y2="4"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="12" x2="9" y2="12"/>','All tasks');
+    if (can('view_audit_log')) html += niBtn('AuditLog','<circle cx="8" cy="8" r="6"/><polyline points="8,4 8,8 11,10"/>','Audit log');
+    if (can('view_dashboard')) html += niBtn('Analytics','<rect x="1" y="9" width="3" height="6"/><rect x="6" y="5" width="3" height="10"/><rect x="11" y="1" width="3" height="14"/>','Analytics');
+    html += `</div>`;
+  }
+  // My work
+  html += `<div class="ns"><div class="nsl">My work</div>`;
+  html += niBtn('MyTasks','<rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="8" y1="5" x2="8" y2="11"/>','My tasks');
+  html += niBtn('MyKPI','<polyline points="1,11 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>','My KPI');
+  html += `</div><div class="ns"><div class="nsl">Team</div>`;
+  if (can('view_team_board')) html += niBtn('TeamBoard','<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>','Team board');
+  html += niBtn('Projects','<rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/>','Projects');
+  html += `</div>`;
+  // Settings
+  if (can('manage_users') || can('manage_roles') || can('import_data')) {
+    html += `<div class="ns"><div class="nsl">Settings</div>`;
+    if (can('manage_users')) html += niBtn('Admin','<circle cx="8" cy="5" r="3"/><path d="M1,14 Q1,10 8,10 Q15,10 15,14"/>','Manage team');
+    if (can('manage_roles')) html += niBtn('Roles','<rect x="1" y="1" width="5" height="5" rx="1"/><rect x="1" y="9" width="5" height="5" rx="1"/><line x1="9" y1="3.5" x2="15" y2="3.5"/><line x1="9" y1="11.5" x2="15" y2="11.5"/>','Roles & permissions');
+    if (can('import_data')) html += niBtn('Import','<polyline points="8,1 8,10"/><polyline points="4,6 8,10 12,6"/><rect x="2" y="12" width="12" height="3" rx="1"/>','Import data');
+    html += `</div>`;
+  }
+  nav.innerHTML = html;
+}
+
+function navigateTo(page) {
+  CP = page;
+  document.querySelectorAll('.ni').forEach(el => el.classList.toggle('active', el.dataset.page === page));
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('page' + page);
+  if (el) el.classList.add('active');
+  const renderers = {
+    MyTasks: renderMyTasks, MyKPI: renderMyKPI, TeamBoard: renderTeamBoard,
+    Projects: renderProjects, Dashboard: renderDashboard, Workload: renderWorkload,
+    AIAdvisor: renderAIAdvisor, AllTasks: renderAllTasks, AuditLog: renderAuditLog,
+    KPI: renderKPI, Import: renderImport, Roles: renderRoles, Admin: renderAdmin, Analytics: renderAnalytics
+  };
+  if (renderers[page]) renderers[page]();
+}
+
+// ══════════════════════════════════
+// HELPERS
+// ══════════════════════════════════
+function INI(name) { return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function OD(eta,status) {
+  if (!eta||['Completed','Cancelled'].includes(status)) return false;
+  return new Date(eta) < new Date(new Date().toDateString());
+}
+function DD(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
+function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
+function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
+function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending'].includes(t.status)).reduce((s,t)=>s+(W_WEIGHTS[t.task_type]||W_DEFAULT),0); }
+function wlStatus(score){
+  const gm = parseInt(WS.green_max||14), am = parseInt(WS.amber_max||25);
+  if(score<=gm) return {label:'Available',cls:'wl-avail',color:'var(--green)'};
+  if(score<=am) return {label:'Busy',cls:'wl-busy',color:'var(--amber)'};
+  return {label:'Overloaded',cls:'wl-over',color:'var(--red)'};
+}
+
+// ══════════════════════════════════
+// MY TASKS
+// ══════════════════════════════════
+async function renderMyTasks() {
+  const el = document.getElementById('pageMyTasks');
+  el.innerHTML = `<div class="lov"><div class="sp"></div></div>`;
+  const {data:tasks} = await sb.from('tasks').select('*').eq('ba_id',CU.id).order('created_at',{ascending:false});
+  const T = tasks||[];
+  const od = T.filter(t=>OD(t.eta,t.status)).length;
+  const sc = {};
+  T.forEach(t=>{sc[t.status]=(sc[t.status]||0)+1;});
+  el.innerHTML = `
+    <div class="phr">
+      <div><div class="pt">My tasks</div><div class="ps">Your weekly task list</div></div>
+      <button class="btn btn-a" onclick="openAddTask('${CU.id}')">+ Add task</button>
+    </div>
+    <div class="mrow">
+      <div class="mc gd"><div class="mv">${sc['In Progress']||0}</div><div class="ml">In progress</div></div>
+      <div class="mc"><div class="mv">${sc['To Do']||0}</div><div class="ml">To do</div></div>
+      <div class="mc wn"><div class="mv">${sc['Pending']||0}</div><div class="ml">Pending</div></div>
+      <div class="mc al"><div class="mv">${od}</div><div class="ml">Overdue</div></div>
+    </div>
+    <div class="card">
+      <div class="ar" id="mtFilters">${['All',...TASK_STATUSES].map((s,i)=>`<button class="fc ${i===0?'active':''}" onclick="filterMT(this,'${s}')">${s}</button>`).join('')}</div>
+      <div id="mtTable">${buildTT(T,'All',CU.id,true)}</div>
+    </div>`;
+  window._myTasks = T;
+}
+
+function filterMT(btn,s){
+  document.querySelectorAll('#mtFilters .fc').forEach(c=>c.classList.remove('active')); btn.classList.add('active');
+  document.getElementById('mtTable').innerHTML = buildTT(s==='All'?window._myTasks:window._myTasks.filter(t=>t.status===s),'all',CU.id,true);
+}
+
+function buildTT(tasks,filter,baId,canEdit) {
+  if (!tasks.length) return `<div class="es">No tasks found</div>`;
+  const isMgr = can('mark_review_result');
+  const canOverride = can('override_completed_task');
+  const rows = tasks.map(t=>{
+    const od=OD(t.eta,t.status);
+    const isLocked = t.status==='Completed' && !window._overrideIds?.has(t.id);
+    const isDoc=DOC_TYPES.includes(t.task_type);
+    const rv = isDoc&&isMgr
+      ? `<select onchange="setRR('${t.id}',this.value)" ${isLocked?'disabled':''} style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10.5px;padding:2px 4px;${isLocked?'opacity:.4;cursor:not-allowed':''}">
+          <option value="" ${!t.review_result?'selected':''}>—</option>
+          <option value="Pass" ${t.review_result==='Pass'?'selected':''}>Pass</option>
+          <option value="Rework" ${t.review_result==='Rework'?'selected':''}>Rework</option>
+        </select>`
+      : (t.review_result?`<span class="badge b-${t.review_result.toLowerCase()}">${t.review_result}</span>`:'');
+    const ba = baId==='all' ? `<td style="font-size:10.5px;color:var(--accent);font-weight:600">${AU.find(u=>u.id===t.ba_id)?.name||'?'}</td>` : '';
+    const canEditThis = canEdit&&!isLocked&&(can('edit_task_any')||t.ba_id===CU.id);
+    const edit = canEditThis ? `<button class="bic" onclick="openEditTask('${t.id}')" title="Edit">✎</button>` : '';
+    const del = can('delete_task')&&!isLocked ? `<button class="bic btn-d" onclick="delTask('${t.id}')" title="Delete">✕</button>` : '';
+    const overrideBtn = isLocked&&canOverride ? `<button class="bic" onclick="overrideTask('${t.id}')" title="Override lock" style="color:var(--amber);border-color:var(--amber)">⊘</button>` : '';
+    const lockBadge = isLocked&&!canOverride ? `<span class="lock-badge">🔒</span>` : '';
+    const remarksBtn = `<button class="bic" onclick="toggleRemarks(this,'${t.id}')" title="Remarks/comments" style="color:var(--blue)">💬</button>`;
+    const statusCells = isLocked
+      ? `<td><span class="badge b-done">Completed</span> ${lockBadge}</td>`
+      : `<td><div class="sbs">${buildSB(t.id,t.status,canEdit&&(can('edit_task_any')||t.ba_id===CU.id))}</div></td>`;
+    return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
+      ${ba}
+      <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}</td>
+      <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
+      <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}</td>
+      <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">${t.eta||'—'}</td>
+      ${statusCells}
+      <td>${rv}</td>
+      <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${edit}${overrideBtn}${del}</td>
+    </tr>
+    <tr id="remarks-row-${t.id}" style="display:none"><td colspan="8" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
+  }).join('');
+  const bah = baId==='all'?'<th>BA</th>':'';
+  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Description</th><th>ETA</th><th>Status</th><th>Review</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function buildSB(tid,cur,interactive){
+  return TASK_STATUSES.map(s=>{
+    const active=s===cur?SC(s):'';
+    const click=interactive?`onclick="setStat('${tid}','${s}')"` : '';
+    return `<button class="sb2 ${active}" ${click}>${s}</button>`;
+  }).join('');
+}
+
+async function setStat(tid,ns){
+  const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
+  if(!t||t.status===ns)return;
+  await sb.from('tasks').update({status:ns,updated_at:new Date().toISOString()}).eq('id',tid);
+  await logA(tid,t.ba_id,'status',t.status,ns,'status_change',null);
+  showToast(`Status → ${ns}`,'success'); refreshPage();
+}
+
+async function setRR(tid,result){
+  const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
+  if(!t)return;
+  await sb.from('tasks').update({review_result:result||null,updated_at:new Date().toISOString()}).eq('id',tid);
+  if(result)await logA(tid,t.ba_id,'review_result',t.review_result||'',result,result==='Rework'?'rework':'edited',null);
+  showToast(`Review → ${result||'cleared'}`,'success');
+}
+
+// ══════════════════════════════════
+// TASK MODAL
+// ══════════════════════════════════
+function openAddTask(baId, projId='') {
+  document.getElementById('tId').value=''; document.getElementById('tBaId').value=baId; document.getElementById('tProjId').value=projId;
+  document.getElementById('tType').value='User Story Doc'; document.getElementById('tDesc').value='';
+  document.getElementById('tEta').value=''; document.getElementById('tStatus').value='To Do';
+  document.getElementById('tReview').value=''; document.getElementById('tRemarks').value='';
+  populateAssignee(baId); populateProjDrop(baId,projId); chkReview(); OM('taskModal');
+}
+
+async function openEditTask(tid){
+  const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
+  if(!t)return;
+  document.getElementById('tId').value=t.id; document.getElementById('tBaId').value=t.ba_id; document.getElementById('tProjId').value=t.project_id||'';
+  document.getElementById('tType').value=t.task_type; document.getElementById('tDesc').value=t.description;
+  document.getElementById('tEta').value=t.eta||''; document.getElementById('tStatus').value=t.status;
+  document.getElementById('tReview').value=t.review_result||''; document.getElementById('tRemarks').value=t.remarks||'';
+  populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); chkReview(); OM('taskModal');
+}
+
+function populateAssignee(selId){
+  const opts = can('create_task_any')?AU:AU.filter(u=>u.id===CU.id);
+  document.getElementById('tAssignee').innerHTML=opts.map(u=>`<option value="${u.id}" ${u.id===selId?'selected':''}>${u.name}</option>`).join('');
+}
+
+function onAssigneeChange(){
+  const bid=document.getElementById('tAssignee').value;
+  document.getElementById('tBaId').value=bid;
+  populateProjDrop(bid,'');
+}
+
+function populateProjDrop(baId,selId){
+  const projs = can('create_task_any')?AP:myProjects(baId||CU.id); // scoped to assigned/secondary/supervising
+  document.getElementById('tProjSel').innerHTML=`<option value="">— Select project —</option>`+projs.map(p=>`<option value="${p.id}" ${p.id===selId?'selected':''}>${p.name}</option>`).join('');
+}
+
+function chkReview(){ document.getElementById('reviewFF').style.display=DOC_TYPES.includes(document.getElementById('tType').value)?'block':'none'; }
+
+async function saveTask(){
+  const id=document.getElementById('tId').value;
+  const baId=document.getElementById('tBaId').value||document.getElementById('tAssignee').value;
+  const projId=document.getElementById('tProjSel').value||null;
+  const projName=projId?(AP.find(p=>p.id===projId)?.name||'Unknown'):'General';
+  const type=document.getElementById('tType').value;
+  const desc=document.getElementById('tDesc').value.trim();
+  const eta=document.getElementById('tEta').value||null;
+  const status=document.getElementById('tStatus').value;
+  const review=document.getElementById('tReview').value||null;
+  const remarks=document.getElementById('tRemarks').value.trim();
+  if(!desc){showToast('Description required','error');return;}
+  const btn=document.getElementById('saveTaskBtn');
+  btn.disabled=true;btn.textContent='Saving...';
+  try{
+    if(id){
+      const {data:old}=await sb.from('tasks').select('*').eq('id',id).single();
+      await sb.from('tasks').update({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,review_result:review,remarks,updated_at:new Date().toISOString()}).eq('id',id);
+      if(old.eta!==eta){let flag='edited',delta=null;if(old.eta&&eta){delta=DD(old.eta,eta);flag=delta>0?'delayed':delta<0?'expedited':'edited';}await logA(id,baId,'eta',old.eta||'',eta||'',flag,delta);}
+      if(old.status!==status)await logA(id,baId,'status',old.status,status,'status_change',null);
+      if(review&&old.review_result!==review)await logA(id,baId,'review_result',old.review_result||'',review,review==='Rework'?'rework':'edited',null);
+      showToast('Task updated','success');
+    }else{
+      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,review_result:review,remarks}).select().single();
+      await logA(nt.id,baId,'created','',status,'created',null);
+      showToast('Task added','success');
+    }
+    CM('taskModal');await loadBase();refreshPage();
+  }catch(e){showToast('Error saving','error');console.error(e);}
+  btn.disabled=false;btn.textContent='Save task';
+}
+
+async function delTask(tid){
+  if(!confirm('Delete this task?'))return;
+  await sb.from('tasks').delete().eq('id',tid);
+  showToast('Deleted','success');await loadBase();refreshPage();
+}
+
+// ══════════════════════════════════
+// WORKLOAD RADAR
+// ══════════════════════════════════
+async function renderWorkload(){
+  const el=document.getElementById('pageWorkload');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const {data:tasks}=await sb.from('tasks').select('*');
+  const allT=tasks||[];
+  const gm=parseInt(WS.green_max||14),am=parseInt(WS.amber_max||25),maxScore=am+15;
+  const members=AU.filter(u=>u.id!==null);
+  const scores=members.map(u=>{
+    const ut=allT.filter(t=>t.ba_id===u.id);
+    const score=wlScore(ut);
+    const st=wlStatus(score);
+    const active=ut.filter(t=>t.status==='In Progress').length;
+    const od=ut.filter(t=>OD(t.eta,t.status)).length;
+    return{...u,score,st,active,od,tasks:ut.length};
+  }).sort((a,b)=>b.score-a.score);
+  // Summary counts
+  const over=scores.filter(s=>s.score>am).length;
+  const busy=scores.filter(s=>s.score>gm&&s.score<=am).length;
+  const avail=scores.filter(s=>s.score<=gm).length;
+  el.innerHTML=`
+    <div class="phr">
+      <div><div class="pt">Workload radar</div><div class="ps">Complexity-weighted task load per team member</div></div>
+      <button class="btn btn-g btn-sm" onclick="openWLSettings()">⚙ Adjust thresholds</button>
+    </div>
+    <div class="mrow">
+      <div class="mc al"><div class="mv">${over}</div><div class="ml">Overloaded</div></div>
+      <div class="mc wn"><div class="mv">${busy}</div><div class="ml">Busy</div></div>
+      <div class="mc gd"><div class="mv">${avail}</div><div class="ml">Available</div></div>
+    </div>
+    <div class="card">
+      <div class="ct">Team load — weighted complexity score</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:1rem;display:flex;gap:12px">
+        <span style="color:var(--green)">■</span> Available (0–${gm})
+        <span style="color:var(--amber)">■</span> Busy (${gm+1}–${am})
+        <span style="color:var(--red)">■</span> Overloaded (${am+1}+)
+        <span style="margin-left:8px;color:var(--text3)">Weights: US Doc/Req/UAT=3pts · Testing/DevSupport=2pts · Others=1pt</span>
+      </div>
+      ${scores.map(s=>{
+        const pct=Math.min(s.score/maxScore*100,100);
+        const color=s.score<=gm?'var(--green)':s.score<=am?'var(--amber)':'var(--red)';
+        return `<div class="wlrow">
+          <div class="wln">
+            <span>${s.name} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.tasks} tasks · ${s.active} active${s.od?` · <span style="color:var(--red)">${s.od} late</span>`:''}</span></span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:11px;color:${color}">${s.score}pts</span>
+              <span class="${s.st.cls}">${s.st.label}</span>
+            </div>
+          </div>
+          <div class="wlbg"><div class="wlfill" style="width:${pct}%;background:${color}"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div class="ct">Who can pick up new work?</div>
+      ${scores.filter(s=>s.score<=gm).length===0
+        ? '<div class="es">Everyone is currently loaded. Consider reviewing on-hold tasks first.</div>'
+        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">${
+          scores.filter(s=>s.score<=gm).map(s=>`<div style="background:var(--gbg);border:1px solid rgba(62,207,142,.2);border-radius:var(--r);padding:.75rem">
+            <div style="font-size:13px;font-weight:500;margin-bottom:2px">${s.name}</div>
+            <div style="font-size:11px;color:var(--green)">Load: ${s.score}pts — has capacity</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${s.tasks} current tasks</div>
+          </div>`).join('')
+          }</div>`
+      }
+    </div>`;
+}
+
+function openWLSettings(){
+  const gm=WS.green_max||14,am=WS.amber_max||25;
+  const html=`<div style="padding:1rem;background:var(--surface2);border-radius:var(--r);margin-bottom:.5rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label class="flb">Green max (available)</label><input class="finp" type="number" id="wlGM" value="${gm}" min="5" max="50"></div>
+      <div><label class="flb">Amber max (busy)</label><input class="finp" type="number" id="wlAM" value="${am}" min="10" max="80"></div>
+    </div>
+    <button class="btn btn-a btn-sm" style="margin-top:8px" onclick="saveWLSettings()">Save thresholds</button>
+  </div>`;
+  const existing=document.getElementById('wlSettingsPanel');
+  if(existing){existing.remove();return;}
+  const panel=document.createElement('div');
+  panel.id='wlSettingsPanel';panel.innerHTML=html;
+  document.getElementById('pageWorkload').querySelector('.card').before(panel);
+}
+
+async function saveWLSettings(){
+  const gm=document.getElementById('wlGM').value;
+  const am=document.getElementById('wlAM').value;
+  await Promise.all([
+    sb.from('workload_settings').upsert({key:'green_max',value:String(gm)}),
+    sb.from('workload_settings').upsert({key:'amber_max',value:String(am)}),
+  ]);
+  WS.green_max=gm;WS.amber_max=am;
+  showToast('Thresholds saved','success');renderWorkload();
+}
+
+// ══════════════════════════════════
+// AI ADVISOR
+// ══════════════════════════════════
+async function renderAIAdvisor(){
+  const el=document.getElementById('pageAIAdvisor');
+  chatHistory=[];
+  el.innerHTML=`
+    <div class="phr"><div><div class="pt">AI advisor</div><div class="ps">Powered by Claude · has full context of your team's tasks and workload</div></div></div>
+    <div class="aipanel">
+      <div class="aih"><div class="aidot"></div><div class="ait">Proactive insights</div><button class="btn btn-g btn-sm" onclick="loadInsights()">Refresh ↺</button></div>
+      <div id="aiInsights"><div style="font-size:12px;color:var(--text3)">Loading insights...</div></div>
+    </div>
+    <div class="card">
+      <div class="ct">Ask the AI advisor</div>
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <div class="cir">
+        <input class="cinp" id="chatIn" placeholder="Ask about your team, workload, project risks..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
+        <button class="btn btn-a" onclick="sendChat()">Send</button>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
+        ${['Who is overloaded right now?','Which projects are at risk of delay?','Suggest task redistribution','Who can take on a new project?','Flag long-pending tasks'].map(q=>`<button class="fc btn-sm" onclick="quickQ('${q}')">${q}</button>`).join('')}
+      </div>
+    </div>`;
+  loadInsights();
+}
+
+async function buildAIContext(){
+  const {data:tasks}=await sb.from('tasks').select('*');
+  const allT=tasks||[];
+  const scores=AU.map(u=>{
+    const ut=allT.filter(t=>t.ba_id===u.id);
+    const score=wlScore(ut);
+    const st=wlStatus(score);
+    const od=ut.filter(t=>OD(t.eta,t.status));
+    const pend=ut.filter(t=>t.status==='Pending');
+    const hold=ut.filter(t=>t.status==='On Hold');
+    return{name:u.name,role:roleName(),score,status:st.label,activeCount:ut.filter(t=>t.status==='In Progress').length,overdueCount:od.length,overdueItems:od.map(t=>t.project_name+': '+t.description).slice(0,3),pendingCount:pend.length,holdCount:hold.length,longPending:pend.filter(t=>DD(t.created_at,new Date().toISOString())>14).map(t=>t.project_name+': '+t.description).slice(0,2)};
+  });
+  const projSummary=AP.map(p=>{
+    const assigned=AU.find(u=>u.id===p.assigned_ba_id)?.name||'Unassigned';
+    const projTasks=allT.filter(t=>t.project_id===p.id);
+    const odCount=projTasks.filter(t=>OD(t.eta,t.status)).length;
+    return`${p.name} [${p.status}] — BA: ${assigned} — ${projTasks.length} tasks — ${odCount} overdue`;
+  }).slice(0,20).join('\n');
+  return`You are an AI advisor helping a BA team manager at MyEG. Here is current team data:\n\nTEAM WORKLOAD (complexity-weighted):\n${scores.map(s=>`${s.name}: ${s.score}pts (${s.status}) — ${s.activeCount} active, ${s.overdueCount} overdue, ${s.pendingCount} pending${s.longPending.length?' — LONG PENDING: '+s.longPending.join('; '):''}`).join('\n')}\n\nACTIVE PROJECTS:\n${projSummary}\n\nThresholds: Available=0-${WS.green_max||14}pts, Busy=${parseInt(WS.green_max||14)+1}-${WS.amber_max||25}pts, Overloaded=${parseInt(WS.amber_max||25)+1}+pts\n\nRespond concisely and specifically. Reference actual names and project names. Be direct and actionable.`;
+}
+
+async function loadInsights(){
+  document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><div class="sp"></div> Analysing your team...</div>`;
+  const ctx=await buildAIContext();
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',max_tokens:800,
+        system:ctx+'\n\nGenerate 4 proactive insights as JSON array. Each: {type:"warning"|"info"|"success"|"tip", icon:"⚠"|"💡"|"✓"|"→", title:string, body:string}. Return ONLY valid JSON array, no markdown.',
+        messages:[{role:'user',content:'Generate insights now.'}]
+      })
+    });
+    const d=await res.json();
+    const text=d.content?.[0]?.text||'[]';
+    const clean=text.replace(/```json|```/g,'').trim();
+    const insights=JSON.parse(clean);
+    const colors={warning:'var(--rbg)',info:'var(--bbg)',success:'var(--gbg)',tip:'var(--ag)'};
+    const tc={warning:'var(--red)',info:'var(--blue)',success:'var(--green)',tip:'var(--accent)'};
+    document.getElementById('aiInsights').innerHTML=insights.map(i=>`
+      <div class="aiins">
+        <div class="aiico" style="background:${colors[i.type]||'var(--ag)'}"><span style="color:${tc[i.type]||'var(--accent)'}">${i.icon}</span></div>
+        <div class="aitext"><strong>${i.title}</strong><br>${i.body}</div>
+      </div>`).join('');
+  }catch(e){
+    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load insights. Check your Anthropic API key.</div>`;
+  }
+}
+
+function addChatMsg(role,text){
+  const msgs=document.getElementById('chatMsgs');
+  const isAI=role==='ai';
+  const av=isAI?`<div class="cav" style="background:var(--ag);color:var(--accent)">AI</div>`:`<div class="cav" style="background:var(--surface3);color:var(--text2)">${INI(CU.name)}</div>`;
+  const bubble=`<div class="cb">${text.replace(/\n/g,'<br>')}</div>`;
+  const div=document.createElement('div');
+  div.className=`cm ${isAI?'ai':'u'}`;
+  div.innerHTML=isAI?`${av}${bubble}`:`${bubble}${av}`;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+function quickQ(q){document.getElementById('chatIn').value=q;sendChat();}
+
+async function sendChat(){
+  const inp=document.getElementById('chatIn');
+  const q=inp.value.trim();
+  if(!q)return;
+  inp.value='';
+  addChatMsg('user',q);
+  chatHistory.push({role:'user',content:q});
+  // typing indicator
+  const typDiv=addChatMsg('ai','<span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>');
+  try{
+    const ctx=await buildAIContext();
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',max_tokens:1000,
+        system:ctx,
+        messages:chatHistory
+      })
+    });
+    const d=await res.json();
+    const reply=d.content?.[0]?.text||'Sorry, I could not generate a response.';
+    typDiv.querySelector('.cb').innerHTML=reply.replace(/\n/g,'<br>');
+    chatHistory.push({role:'assistant',content:reply});
+  }catch(e){
+    typDiv.querySelector('.cb').innerHTML='Error connecting to AI. Check your API key.';
+  }
+}
+
+// ══════════════════════════════════
+// TEAM BOARD
+// ══════════════════════════════════
+async function renderTeamBoard(){
+  const el=document.getElementById('pageTeamBoard');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const {data:tasks}=await sb.from('tasks').select('*').order('created_at',{ascending:false});
+  window._bt=tasks||[];
+  const bas=AU;
+  let html=`<div class="ph"><div class="pt">Team board</div><div class="ps">Read-only view of all team members' tasks</div></div><div class="bagrid">`;
+  bas.forEach(ba=>{
+    const bt=(tasks||[]).filter(t=>t.ba_id===ba.id);
+    const ip=bt.filter(t=>t.status==='In Progress').length,todo=bt.filter(t=>t.status==='To Do').length;
+    const pend=bt.filter(t=>t.status==='Pending').length,od=bt.filter(t=>OD(t.eta,t.status)).length;
+    const tot=bt.length||1;
+    html+=`<div class="bacard" onclick="showBAT(this,'${ba.id}')">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:2px">${ba.name}</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:5px">${bt.length} tasks</div>
+      <div class="basbr"><div style="width:${ip/tot*100}%;background:var(--green)"></div><div style="width:${todo/tot*100}%;background:var(--blue)"></div><div style="width:${pend/tot*100}%;background:var(--amber)"></div></div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">
+        ${ip?`<span class="badge b-ip">${ip} active</span>`:''}
+        ${pend?`<span class="badge b-pending">${pend} pend</span>`:''}
+        ${od?`<span class="badge b-cancelled">${od} late</span>`:''}
+      </div>
+    </div>`;
+  });
+  html+=`</div><div id="baDetail"></div>`;
+  el.innerHTML=html;
+}
+
+function showBAT(card,baId){
+  document.querySelectorAll('.bacard').forEach(c=>c.classList.remove('sel'));card.classList.add('sel');
+  const ba=AU.find(u=>u.id===baId);
+  const tasks=window._bt.filter(t=>t.ba_id===baId);
+  document.getElementById('baDetail').innerHTML=`<div class="card"><div class="ct">${ba?.name}'s tasks</div>${buildTT(tasks,'All',baId,false)}</div>`;
+}
+
+// ══════════════════════════════════
+// PROJECTS
+// ══════════════════════════════════
+async function renderProjects(){
+  const el=document.getElementById('pageProjects');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  await loadBase();
+  const canMgr=can('create_project');
+  const visible=canMgr?AP:myProjects(CU.id);
+  window._projVis=visible;
+  el.innerHTML=`
+    <div class="phr">
+      <div><div class="pt">Projects</div><div class="ps">${visible.length} projects</div></div>
+      <div style="display:flex;gap:7px">${canMgr?'<button class="btn btn-a" onclick="openAddProj()">+ Add project</button>':''}</div>
+    </div>
+    <div class="ar"><input class="si" id="pSearch" placeholder="Search..." oninput="filterProj()" style="width:200px">
+    ${PROJ_STATUSES.map((s,i)=>`<button class="fc ${i===0?'active':''}" onclick="filterProjStatus(this,'${s}')" data-ps="${s}">${s}</button>`).join('')}
+    <button class="fc active" onclick="filterProjStatus(this,'All')" style="order:-1">All</button>
+    </div>
+    <div id="projGrid">${buildProjGrid(visible)}</div>`;
+}
+
+function filterProj(){
+  const q=document.getElementById('pSearch').value.toLowerCase();
+  document.getElementById('projGrid').innerHTML=buildProjGrid((window._projVis||[]).filter(p=>p.name.toLowerCase().includes(q)));
+}
+
+function filterProjStatus(btn,s){
+  document.querySelectorAll('#pageProjects .fc').forEach(c=>c.classList.remove('active'));btn.classList.add('active');
+  const base=window._projVis||[];
+  document.getElementById('projGrid').innerHTML=buildProjGrid(s==='All'?base:base.filter(p=>p.status===s));
+}
+
+function buildProjGrid(projects){
+  if(!projects.length)return`<div class="es">No projects found</div>`;
+  return`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px">`+
+    projects.map(p=>{
+      const aBA=AU.find(u=>u.id===p.assigned_ba_id),s2=AU.find(u=>u.id===p.secondary_ba_id),sup=AU.find(u=>u.id===p.supervising_ba_id);
+      const canE=can('edit_project'),canD=can('delete_project');
+      return`<div class="card" style="margin-bottom:0">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:7px;margin-bottom:7px">
+          <div style="font-size:13px;font-weight:600;line-height:1.3;flex:1">${p.name}</div>
+          <span class="badge ${PSC(p.status)}" style="flex-shrink:0">${p.status}</span>
+        </div>
+        ${p.description?`<div style="font-size:11px;color:var(--text2);margin-bottom:7px;line-height:1.4">${p.description}</div>`:''}
+        <div style="font-size:11px;color:var(--text3);display:flex;flex-direction:column;gap:2px;margin-bottom:8px">
+          ${aBA?`<div>Assigned: <span style="color:var(--text2)">${aBA.name}</span></div>`:''}
+          ${s2?`<div>Secondary: <span style="color:var(--text2)">${s2.name}</span></div>`:''}
+          ${sup?`<div>Supervising: <span style="color:var(--text2)">${sup.name}</span></div>`:''}
+          ${p.project_manager?`<div>PM: <span style="color:var(--text2)">${p.project_manager}</span></div>`:''}
+          ${p.business_owner?`<div>Owner: <span style="color:var(--text2)">${p.business_owner}</span></div>`:''}
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+          ${p.jira_url?`<a href="${p.jira_url}" target="_blank" style="font-size:10.5px;color:var(--accent);border:1px solid rgba(124,108,250,.25);padding:2px 7px;border-radius:4px">Jira ↗</a>`:''}
+          <button class="btn btn-g btn-sm" onclick="openAddTask('${p.assigned_ba_id||CU.id}','${p.id}')">+ Task</button>
+          ${canE?`<button class="bic btn-sm" onclick="openEditProj('${p.id}')" style="margin-left:auto">✎</button>`:''}
+          ${canD?`<button class="bic btn-d btn-sm" onclick="delProj('${p.id}')">✕</button>`:''}
+        </div>
+      </div>`;
+    }).join('')+`</div>`;
+}
+
+function fillBASels(aId,s2Id,supId){
+  const opts=`<option value="">— None —</option>`+AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  ['pBA','pBA2','pBASup'].forEach(id=>{document.getElementById(id).innerHTML=opts;});
+  if(aId)document.getElementById('pBA').value=aId;
+  if(s2Id)document.getElementById('pBA2').value=s2Id;
+  if(supId)document.getElementById('pBASup').value=supId;
+}
+
+function openAddProj(){
+  document.getElementById('pId').value='';document.getElementById('projModalTitle').textContent='Add project';
+  ['pName','pPM','pOwner','pJira','pDesc'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pStatus').value='In Progress';fillBASels('','','');OM('projModal');
+}
+
+function openEditProj(id){
+  const p=AP.find(x=>x.id===id);if(!p)return;
+  document.getElementById('pId').value=p.id;document.getElementById('projModalTitle').textContent='Edit project';
+  document.getElementById('pName').value=p.name;document.getElementById('pStatus').value=p.status;
+  document.getElementById('pPM').value=p.project_manager||'';document.getElementById('pOwner').value=p.business_owner||'';
+  document.getElementById('pJira').value=p.jira_url||'';document.getElementById('pDesc').value=p.description||'';
+  fillBASels(p.assigned_ba_id,p.secondary_ba_id,p.supervising_ba_id);OM('projModal');
+}
+
+async function saveProject(){
+  const id=document.getElementById('pId').value;
+  const name=document.getElementById('pName').value.trim();
+  if(!name){showToast('Project name required','error');return;}
+  const payload={name,status:document.getElementById('pStatus').value,assigned_ba_id:document.getElementById('pBA').value||null,secondary_ba_id:document.getElementById('pBA2').value||null,supervising_ba_id:document.getElementById('pBASup').value||null,project_manager:document.getElementById('pPM').value.trim()||null,business_owner:document.getElementById('pOwner').value.trim()||null,jira_url:document.getElementById('pJira').value.trim()||null,description:document.getElementById('pDesc').value.trim()||null,updated_at:new Date().toISOString()};
+  if(id)await sb.from('projects').update(payload).eq('id',id);
+  else await sb.from('projects').insert(payload);
+  showToast(id?'Project updated':'Project added','success');
+  CM('projModal');await loadBase();renderProjects();
+}
+
+async function delProj(id){
+  if(!confirm('Delete this project?'))return;
+  await sb.from('projects').delete().eq('id',id);
+  showToast('Deleted','success');await loadBase();renderProjects();
+}
+
+// ══════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════
+async function renderDashboard(){
+  const el=document.getElementById('pageDashboard');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const {data:tasks}=await sb.from('tasks').select('*');
+  const allT=tasks||[];
+  const od=allT.filter(t=>OD(t.eta,t.status)).length;
+  const ip=allT.filter(t=>t.status==='In Progress').length;
+  const pend=allT.filter(t=>t.status==='Pending').length;
+  const hold=allT.filter(t=>t.status==='On Hold').length;
+  const actProj=AP.filter(p=>['Active CR','In Progress'].includes(p.status)).length;
+  let html=`
+    <div class="ph"><div class="pt">Dashboard</div><div class="ps">${new Date().toLocaleDateString('en-MY',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div></div>
+    <div class="mrow">
+      <div class="mc ac"><div class="mv">${AU.length}</div><div class="ml">Team members</div></div>
+      <div class="mc"><div class="mv">${actProj}</div><div class="ml">Active projects</div></div>
+      <div class="mc gd"><div class="mv">${ip}</div><div class="ml">In progress</div></div>
+      <div class="mc wn"><div class="mv">${pend}</div><div class="ml">Pending</div></div>
+      <div class="mc"><div class="mv">${hold}</div><div class="ml">On hold</div></div>
+      <div class="mc al"><div class="mv">${od}</div><div class="ml">Overdue</div></div>
+    </div>`;
+  // Workload mini-radar
+  const scores=AU.map(u=>{const ut=allT.filter(t=>t.ba_id===u.id);const s=wlScore(ut);const st=wlStatus(s);return{...u,score:s,st};}).sort((a,b)=>b.score-a.score);
+  const maxS=parseInt(WS.amber_max||25)+15;
+  html+=`<div class="card"><div class="ct">Workload at a glance <button class="btn btn-g btn-sm" onclick="navigateTo('Workload')" style="margin-left:auto">Full view →</button></div>
+    ${scores.slice(0,8).map(s=>`<div class="wlrow"><div class="wln"><span>${s.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-family:var(--mono);font-size:10px;color:${s.score>parseInt(WS.amber_max||25)?'var(--red)':s.score>parseInt(WS.green_max||14)?'var(--amber)':'var(--green)'}">${s.score}pts</span><span class="${s.st.cls}">${s.st.label}</span></div></div><div class="wlbg"><div class="wlfill" style="width:${Math.min(s.score/maxS*100,100)}%;background:${s.score>parseInt(WS.amber_max||25)?'var(--red)':s.score>parseInt(WS.green_max||14)?'var(--amber)':'var(--green)'}"></div></div></div>`).join('')}
+  </div>`;
+  // Flags
+  const flags=[];
+  AU.forEach(ba=>{
+    allT.filter(t=>t.ba_id===ba.id&&OD(t.eta,t.status)).forEach(t=>{const d=Math.round((new Date()-new Date(t.eta))/86400000);flags.push({level:'red',text:`<strong>${ba.name}</strong> — ${t.project_name}: ${t.description}`,meta:`Overdue by ${d} day${d>1?'s':''} · ${t.status}`});});
+    const pc=allT.filter(t=>t.ba_id===ba.id&&t.status==='Pending').length;
+    if(pc>=2)flags.push({level:'amber',text:`<strong>${ba.name}</strong> has ${pc} pending tasks`,meta:'May need external input or escalation'});
+  });
+  if(flags.length){html+=`<div class="card"><div class="ct" style="color:var(--red)">⚠ Needs attention (${flags.length})</div>${flags.slice(0,6).map(f=>`<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)"><div style="width:7px;height:7px;border-radius:50%;background:${f.level==='red'?'var(--red)':'var(--amber)'};flex-shrink:0;margin-top:5px"></div><div><div style="font-size:12px">${f.text}</div><div style="font-size:10.5px;color:var(--text3)">${f.meta}</div></div></div>`).join('')}</div>`;}
+  el.innerHTML=html;
+}
+
+// ══════════════════════════════════
+// ALL TASKS
+// ══════════════════════════════════
+let _AT=[];
+async function renderAllTasks(){
+  const el=document.getElementById('pageAllTasks');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const {data:tasks}=await sb.from('tasks').select('*').order('updated_at',{ascending:false});
+  _AT=tasks||[];
+  el.innerHTML=`
+    <div class="phr">
+      <div><div class="pt">All tasks</div><div class="ps">${_AT.length} tasks</div></div>
+      <button class="btn btn-a" onclick="openAddTask('${CU.id}')">+ Add task</button>
+    </div>
+    <div class="card">
+      <div class="ar">
+        <input class="si" id="tSrch" placeholder="Search..." oninput="filterAT()" style="width:170px">
+        <select class="si" id="fBA" onchange="filterAT()"><option value="All">All BAs</option>${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+        <select class="si" id="fSt" onchange="filterAT()"><option value="All">All statuses</option>${TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        <select class="si" id="fTy" onchange="filterAT()"><option value="All">All types</option>${TASK_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+      </div>
+      <div id="atTable"></div>
+    </div>`;
+  filterAT();
+}
+
+function filterAT(){
+  const q=(document.getElementById('tSrch')?.value||'').toLowerCase();
+  const bf=document.getElementById('fBA')?.value||'All';
+  const sf=document.getElementById('fSt')?.value||'All';
+  const tf=document.getElementById('fTy')?.value||'All';
+  const f=_AT.filter(t=>{
+    if(bf!=='All'&&t.ba_id!==bf)return false;
+    if(sf!=='All'&&t.status!==sf)return false;
+    if(tf!=='All'&&t.task_type!==tf)return false;
+    if(q&&!t.project_name.toLowerCase().includes(q)&&!t.description.toLowerCase().includes(q))return false;
+    return true;
+  });
+  document.getElementById('atTable').innerHTML=buildTT(f,'All','all',true);
+}
+
+// ══════════════════════════════════
+// AUDIT LOG
+// ══════════════════════════════════
+async function renderAuditLog(){
+  const el=document.getElementById('pageAuditLog');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const {data:audit}=await sb.from('task_audit').select('*,tasks(project_name,description)').order('changed_at',{ascending:false}).limit(300);
+  const entries=audit||[];
+  const fc={delayed:0,expedited:0,rework:0};
+  entries.forEach(e=>{if(fc[e.flag_type]!==undefined)fc[e.flag_type]++;});
+  el.innerHTML=`
+    <div class="ph"><div class="pt">Audit log</div><div class="ps">All task changes — ETA shifts, status updates, reworks</div></div>
+    <div class="mrow">
+      <div class="mc al"><div class="mv">${fc.delayed}</div><div class="ml">ETA delays</div></div>
+      <div class="mc gd"><div class="mv">${fc.expedited}</div><div class="ml">Brought forward</div></div>
+      <div class="mc wn"><div class="mv">${fc.rework}</div><div class="ml">Reworks</div></div>
+    </div>
+    <div class="card">
+      <div class="ar">${['all','delayed','expedited','status_change','rework','created'].map(f=>`<button class="fc ${f==='all'?'active':''}" onclick="filterAL(this,'${f}')">${f.replace('_',' ')}</button>`).join('')}</div>
+      <div id="alEntries">${buildAL(entries,'all')}</div>
+    </div>`;
+  window._al=entries;
+}
+
+function filterAL(btn,f){
+  document.querySelectorAll('#pageAuditLog .fc').forEach(c=>c.classList.remove('active'));btn.classList.add('active');
+  document.getElementById('alEntries').innerHTML=buildAL(window._al,f);
+}
+
+function buildAL(entries,flag){
+  const f=flag==='all'?entries:entries.filter(e=>e.flag_type===flag);
+  if(!f.length)return`<div class="es">No entries</div>`;
+  return f.map(e=>{
+    const task=e.tasks||{};
+    const dc=e.flag_type||'edited';
+    const dot={delayed:'var(--red)',expedited:'var(--green)',status_change:'var(--accent)',created:'var(--blue)',rework:'var(--amber)',edited:'var(--text3)'}[dc]||'var(--text3)';
+    const fp=e.flag_type==='delayed'?`<span class="fp fpl">DELAYED${e.days_delta?` +${e.days_delta}d`:''}</span>`:e.flag_type==='expedited'?`<span class="fp fpe">EARLIER${e.days_delta?` ${e.days_delta}d`:''}</span>`:'';
+    const diff=(e.old_value&&e.new_value&&e.old_value!==e.new_value)?`<div style="display:flex;gap:5px;align-items:center;margin-top:3px;font-size:10.5px;font-family:var(--mono)"><span style="color:var(--red);text-decoration:line-through">${e.old_value}</span><span style="color:var(--text3)">→</span><span style="color:var(--green)">${e.new_value}</span>${fp}</div>`:'';
+    const when=new Date(e.changed_at).toLocaleString('en-MY',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return`<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0;margin-top:5px"></div>
+      <div style="flex:1"><div style="font-size:12px"><strong>${e.changed_by_name}</strong> changed <em>${e.field_name}</em> on <strong>${task.project_name||'?'}</strong> — ${task.description||''}</div>${diff}<div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--mono)">${when}</div></div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════
+// KPI
+// ══════════════════════════════════
+async function renderKPI(){
+  const el=document.getElementById('pageKPI');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const now=new Date();
+  const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
+  const {data:tasks}=await sb.from('tasks').select('*').gte('updated_at',ms);
+  const scores=AU.map(u=>calcKPI(u,tasks||[])).sort((a,b)=>b.total-a.total);
+  el.innerHTML=`
+    <div class="ph"><div class="pt">KPI scores</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
+    <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (35)</th><th>Timeliness (30)</th><th>Volume (20)</th><th>Coverage (15)</th><th>Total</th><th>Rating</th></tr></thead>
+    <tbody>${scores.map(s=>`<tr><td style="font-weight:500">${s.name}</td>
+      ${['quality:qScore:35','timeliness:tScore:30'].map(x=>{const[k,sk,m]=x.split(':');return`<td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(s[k])}%;height:100%;background:${KC(s[k])};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s[sk]}/${m}</span></div></td>`;}).join('')}
+      <td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(Math.min(s.volume/s.target,1)*100)}%;height:100%;background:${KC(s.volume/s.target*100)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.vScore}/20</span></div></td>
+      <td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(s.coverage)}%;height:100%;background:${KC(s.coverage)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.cScore}/15</span></div></td>
+      <td style="font-family:var(--mono);font-size:15px;font-weight:600;color:${KC(s.total)}">${s.total}</td>
+      <td><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></td>
+    </tr>`).join('')}</tbody></table></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${scores.map(s=>`<div class="bacard" onclick="showKPID('${s.id}')"><div style="font-size:12.5px;font-weight:600;margin-bottom:3px">${s.name}</div><div style="font-size:24px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}</div><div style="font-size:10px;color:var(--text3);margin-bottom:6px">/100 pts</div><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></div>`).join('')}</div>
+    <div id="kpiDetail"></div>`;
+  window._kpiS=scores;
+}
+
+function showKPID(id){
+  const s=window._kpiS?.find(x=>x.id===id);if(!s)return;
+  const rows=[{l:'Documentation quality',p:s.quality,sc:s.qScore,mx:35,n:`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`},{l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:30,n:`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`},{l:'US doc volume',p:Math.min(s.volume/s.target,1)*100,sc:s.vScore,mx:20,n:`${s.volume} docs (target: ${s.target})`},{l:'Project coverage',p:s.coverage,sc:s.cScore,mx:15,n:`${s.coverage}% documented`}];
+  document.getElementById('kpiDetail').innerHTML=`<div class="card"><div class="ct">${s.name} — breakdown</div>
+    ${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:42px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`).join('')}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-size:13px;font-weight:500">Total</span><span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span></div>
+    ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
+  </div>`;
+  document.getElementById('kpiDetail').scrollIntoView({behavior:'smooth'});
+}
+
+async function renderMyKPI(){
+  const el=document.getElementById('pageMyKPI');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  const now=new Date();
+  const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
+  const {data:tasks}=await sb.from('tasks').select('*').eq('ba_id',CU.id).gte('updated_at',ms);
+  const s=calcKPI(CU,tasks||[]);
+  const rows=[{l:'Documentation quality',p:s.quality,sc:s.qScore,mx:35,n:`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`},{l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:30,n:`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`},{l:'US doc volume',p:Math.min(s.volume/s.target,1)*100,sc:s.vScore,mx:20,n:`${s.volume} docs (target: ${s.target})`},{l:'Project coverage',p:s.coverage,sc:s.cScore,mx:15,n:`${s.coverage}%`}];
+  el.innerHTML=`
+    <div class="ph"><div class="pt">My KPI</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
+    <div class="card" style="max-width:500px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)">
+        <div style="width:46px;height:46px;border-radius:50%;background:var(--ag);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent)">${INI(CU.name)}</div>
+        <div><div style="font-size:14px;font-weight:600">${CU.name}</div><div style="font-size:11px;color:var(--text3)">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
+        <div style="margin-left:auto;text-align:right"><div style="font-size:28px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}</div><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></div>
+      </div>
+      ${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px;transition:width .5s"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:40px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`).join('')}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:500">Total</span><span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span></div>
+      ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
+    </div>`;
+}
+
+function calcKPI(ba,tasks){
+  const bt=tasks.filter(t=>t.ba_id===ba.id);
+  const done=bt.filter(t=>t.status==='Completed');
+  const onTime=done.filter(t=>!t.eta||new Date(t.eta)>=new Date(t.updated_at)).length;
+  const timeliness=done.length?Math.round(onTime/done.length*100):100;
+  const docs=bt.filter(t=>DOC_TYPES.includes(t.task_type)&&t.review_result);
+  const passCount=docs.filter(t=>t.review_result==='Pass').length;
+  const reworkCount=docs.filter(t=>t.review_result==='Rework').length;
+  const quality=docs.length?Math.round(passCount/docs.length*100):100;
+  const volume=done.filter(t=>DOC_TYPES.includes(t.task_type)).length;
+  const target=ba.volume_target||4;
+  const projs=[...new Set(bt.map(t=>t.project_name))];
+  const doced=[...new Set(done.filter(t=>DOC_TYPES.includes(t.task_type)).map(t=>t.project_name))];
+  const coverage=projs.length?Math.round(doced.length/projs.length*100):100;
+  const qScore=Math.round(quality/100*35),tScore=Math.round(timeliness/100*30),vScore=Math.round(Math.min(volume/target,1)*20),cScore=Math.round(coverage/100*15);
+  const total=qScore+tScore+vScore+cScore;
+  const notes=[];
+  if(quality<70)notes.push(`Low first-pass rate — ${reworkCount} rework${reworkCount>1?'s':''} this month`);
+  if(timeliness<75)notes.push('Frequent ETA slippage — check audit log');
+  if(volume<target)notes.push(`Below US doc target (${volume}/${target})`);
+  return{id:ba.id,name:ba.name,quality,timeliness,volume,target,coverage,qScore,tScore,vScore,cScore,total,passCount,reworkCount,onTime,totalCompleted:done.length,notes};
+}
+function KC(p){return p>=85?'var(--green)':p>=70?'var(--blue)':p>=55?'var(--amber)':'var(--red)';}
+function RLbl(s){return s>=90?'Excellent':s>=75?'Good':s>=60?'Needs improvement':'Critical';}
+function RL(s){return s>=90?'pass':s>=75?'todo':s>=60?'pending':'cancelled';}
+
+// ══════════════════════════════════
+// IMPORT
+// ══════════════════════════════════
+function renderImport(){
+  const el=document.getElementById('pageImport');
+  el.innerHTML=`
+    <div class="ph"><div class="pt">Import data</div><div class="ps">Bulk import projects or tasks from Excel (.xlsx)</div></div>
+    <div class="card">
+      <div class="ar" id="impTypeBtns">
+        <button class="fc active" onclick="setImpType(this,'projects')">Projects</button>
+        <button class="fc" onclick="setImpType(this,'tasks')">Tasks</button>
+      </div>
+      <div id="impGuide"></div>
+      <div class="izn" id="impZone" onclick="document.getElementById('xlsxInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <div style="font-size:24px;opacity:.4;margin-bottom:.5rem">⬆</div>
+        <div class="izt">Click to upload or drag & drop your Excel file</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Accepted: .xlsx · Max 5MB</div>
+      </div>
+      <input type="file" id="xlsxInput" accept=".xlsx" style="display:none" onchange="handleFile(this.files[0])">
+      <div id="impPreview"></div>
+      <div style="display:flex;gap:7px;margin-top:.75rem">
+        <button class="btn btn-g" onclick="dlTemplate()">⬇ Download template</button>
+        <button class="btn btn-a" onclick="confirmImport()" id="confirmImpBtn" style="display:none">Import data</button>
+      </div>
+    </div>`;
+  setImpType(document.querySelector('#impTypeBtns .fc'),'projects');
+}
+
+const IMP_GUIDES = {
+  projects:{
+    required:['Project Name','Status'],
+    optional:['Assigned BA Email','Secondary BA Email','Supervising BA Email','Project Manager','Business Owner','Jira URL','Description'],
+    statuses:['Active CR','In Progress','On Hold','Maintenance','Cancelled','Completed'],
+    notes:['BA email must match an existing user account','Status must be one of the allowed values']
+  },
+  tasks:{
+    required:['BA Email','Project Name','Task Type','Description','Status'],
+    optional:['ETA (YYYY-MM-DD)','Review Result','Remarks'],
+    statuses:TASK_STATUSES,
+    taskTypes:TASK_TYPES,
+    notes:['BA Email must match an existing user','ETA format must be YYYY-MM-DD','Task Type must match exactly']
+  }
+};
+
+function setImpType(btn,type){
+  importType=type;importRows=[];
+  document.querySelectorAll('#impTypeBtns .fc').forEach(c=>c.classList.remove('active'));btn.classList.add('active');
+  document.getElementById('impPreview').innerHTML='';
+  const el=document.getElementById('confirmImpBtn');if(el)el.style.display='none';
+  const g=IMP_GUIDES[type];
+  document.getElementById('impGuide').innerHTML=`
+    <div style="background:var(--surface2);border-radius:var(--rs);padding:.85rem;margin-bottom:.85rem;font-size:12px">
+      <div style="font-weight:600;margin-bottom:.5rem;color:var(--text)">Required columns: <span style="color:var(--red)">${g.required.join(', ')}</span></div>
+      <div style="margin-bottom:.5rem;color:var(--text2)">Optional columns: ${g.optional.join(', ')}</div>
+      ${g.statuses?`<div style="color:var(--text3)">Allowed ${type==='projects'?'project ':'task '}statuses: ${g.statuses.join(' · ')}</div>`:''}
+      ${g.taskTypes?`<div style="color:var(--text3);margin-top:3px">Allowed task types: ${g.taskTypes.join(' · ')}</div>`:''}
+      <div style="margin-top:.5rem;color:var(--text3)">${g.notes.map(n=>`• ${n}`).join('<br>')}</div>
+    </div>`;
+}
+
+function handleDrop(e){e.preventDefault();document.getElementById('impZone').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)handleFile(f);}
+
+function handleFile(file){
+  if(!file||!file.name.endsWith('.xlsx')){showToast('Please upload an .xlsx file','error');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'binary'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const data=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!data.length){showToast('No data found in file','error');return;}
+    previewImport(data);
+  };
+  reader.readAsBinaryString(file);
+}
+
+function previewImport(data){
+  importRows=[];
+  const g=IMP_GUIDES[importType];
+  const validated=data.map((row,i)=>{
+    const errors=[];
+    g.required.forEach(col=>{if(!row[col]||String(row[col]).trim()==='')errors.push(`Missing: ${col}`);});
+    if(importType==='projects'&&row['Status']&&!PROJ_STATUSES.includes(row['Status']))errors.push(`Invalid status: ${row['Status']}`);
+    if(importType==='tasks'&&row['Task Type']&&!TASK_TYPES.includes(row['Task Type']))errors.push(`Invalid task type: ${row['Task Type']}`);
+    if(importType==='tasks'&&row['Status']&&!TASK_STATUSES.includes(row['Status']))errors.push(`Invalid status: ${row['Status']}`);
+    return{...row,_row:i+2,_ok:errors.length===0,_errors:errors};
+  });
+  importRows=validated;
+  const ok=validated.filter(r=>r._ok).length,bad=validated.filter(r=>!r._ok).length;
+  const cols=importType==='projects'?['Project Name','Status','Assigned BA Email','Project Manager','Business Owner']:['BA Email','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)'];
+  document.getElementById('impPreview').innerHTML=`
+    <div style="margin-bottom:.5rem;font-size:12px">
+      <span style="color:var(--green)">${ok} valid rows</span> · <span style="color:var(--red)">${bad} errors</span> · ${validated.length} total
+    </div>
+    <div style="overflow-x:auto;max-height:280px;overflow-y:auto">
+    <table style="width:100%;font-size:11px;border-collapse:collapse">
+      <thead><tr><th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">#</th><th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">Status</th>${cols.map(c=>`<th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">${c}</th>`).join('')}</tr></thead>
+      <tbody>${validated.slice(0,50).map(r=>`<tr>
+        <td style="padding:4px 7px;border-bottom:1px solid var(--border);color:var(--text3)">${r._row}</td>
+        <td style="padding:4px 7px;border-bottom:1px solid var(--border)">${r._ok?`<span style="color:var(--green);font-size:10px">✓ ok</span>`:`<span style="color:var(--red);font-size:10px">✗ ${r._errors.join('; ')}</span>`}</td>
+        ${cols.map(c=>`<td style="padding:4px 7px;border-bottom:1px solid var(--border);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r[c]||'—'}</td>`).join('')}
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  if(ok>0){document.getElementById('confirmImpBtn').style.display='inline-flex';document.getElementById('confirmImpBtn').textContent=`Import ${ok} valid row${ok>1?'s':''}`;}
+}
+
+async function confirmImport(){
+  const ok=importRows.filter(r=>r._ok);
+  if(!ok.length){showToast('No valid rows to import','error');return;}
+  const btn=document.getElementById('confirmImpBtn');
+  btn.disabled=true;btn.textContent='Importing...';
+  let imported=0;
+  if(importType==='projects'){
+    for(const row of ok){
+      const aBA=AU.find(u=>u.email.toLowerCase()===(row['Assigned BA Email']||'').toLowerCase());
+      const s2=AU.find(u=>u.email.toLowerCase()===(row['Secondary BA Email']||'').toLowerCase());
+      const sup=AU.find(u=>u.email.toLowerCase()===(row['Supervising BA Email']||'').toLowerCase());
+      const {error}=await sb.from('projects').insert({name:row['Project Name'],status:row['Status']||'In Progress',assigned_ba_id:aBA?.id||null,secondary_ba_id:s2?.id||null,supervising_ba_id:sup?.id||null,project_manager:row['Project Manager']||null,business_owner:row['Business Owner']||null,jira_url:row['Jira URL']||null,description:row['Description']||null});
+      if(!error)imported++;
+    }
+  }else{
+    for(const row of ok){
+      const ba=AU.find(u=>u.email.toLowerCase()===(row['BA Email']||'').toLowerCase());
+      if(!ba)continue;
+      const proj=AP.find(p=>p.name.toLowerCase()===row['Project Name'].toLowerCase());
+      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta:row['ETA (YYYY-MM-DD)']||null,status:row['Status']||'To Do',review_result:row['Review Result']||null,remarks:row['Remarks']||null}).select().single();
+      if(!error){await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;}
+    }
+  }
+  await loadBase();
+  showToast(`Imported ${imported} ${importType}`,'success');
+  btn.disabled=false;btn.textContent='Import done';
+  renderImport();
+}
+
+function dlTemplate(){
+  const headers=importType==='projects'
+    ?['Project Name','Status','Assigned BA Email','Secondary BA Email','Supervising BA Email','Project Manager','Business Owner','Jira URL','Description']
+    :['BA Email','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)','Review Result','Remarks'];
+  const sample=importType==='projects'
+    ?[['JMYR Admin Portal','In Progress','syafawati@myeg.com.my','','shahidah@myeg.com.my','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
+    :[['syafawati@myeg.com.my','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','2026-05-10','','Notes here']];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([headers,...sample]);
+  ws['!cols']=headers.map(()=>({wch:22}));
+  XLSX.utils.book_append_sheet(wb,ws,'Template');
+  XLSX.writeFile(wb,`import_template_${importType}.xlsx`);
+}
+
+// ══════════════════════════════════
+// ROLES & PERMISSIONS
+// ══════════════════════════════════
+async function renderRoles(){
+  const el=document.getElementById('pageRoles');
+  await loadBase();
+  el.innerHTML=`
+    <div class="phr">
+      <div><div class="pt">Roles & permissions</div><div class="ps">${AR.length} roles defined</div></div>
+      <button class="btn btn-a" onclick="openAddRole()">+ Create role</button>
+    </div>
+    <div class="card">
+      ${AR.map(r=>{
+        const perms=Array.isArray(r.permissions)?r.permissions:[];
+        const userCount=AU.filter(u=>u.role_id===r.id).length;
+        return`<div class="role-row">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">${r.name}${r.is_system?`<span style="font-size:9px;font-family:var(--mono);color:var(--text3);background:var(--surface3);padding:1px 5px;border-radius:3px">system</span>`:''}
+            </div>
+            <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${perms.length} permissions · ${userCount} user${userCount!==1?'s':''}</div>
+            <div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${perms.slice(0,6).map(p=>`<span style="font-size:9.5px;background:var(--surface3);color:var(--text3);padding:1px 5px;border-radius:3px">${p}</span>`).join('')}${perms.length>6?`<span style="font-size:9.5px;color:var(--text3)">+${perms.length-6} more</span>`:''}</div>
+          </div>
+          <button class="btn btn-g btn-sm" onclick="openEditRole('${r.id}')">Edit</button>
+          ${!r.is_system?`<button class="btn btn-d btn-sm" onclick="delRole('${r.id}','${r.name}')">Delete</button>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function buildPermGrid(selected=[]){
+  const groups=[
+    {label:'Dashboard & overview',keys:['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','view_audit_log','view_workload','use_ai_advisor']},
+    {label:'Tasks',keys:['create_task_own','create_task_any','edit_task_own','edit_task_any','delete_task','mark_review_result']},
+    {label:'Projects',keys:['create_project','edit_project','delete_project']},
+    {label:'Team & settings',keys:['manage_users','manage_roles','import_data','view_team_board']},
+  ];
+  return groups.map(g=>`
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${g.label}</div>
+      <div class="pgrid">${g.keys.map(k=>{
+        const p=ALL_PERMS.find(x=>x.key===k);if(!p)return'';
+        const ck=selected.includes(k)?'ck':'';
+        return`<div class="pi ${ck}" onclick="togglePerm(this,'${k}')">
+          <div class="pcb">${ck?'✓':''}</div>
+          <span class="plb">${p.label}</span>
+        </div>`;
+      }).join('')}</div>
+    </div>`).join('');
+}
+
+function togglePerm(el,key){
+  el.classList.toggle('ck');
+  const cb=el.querySelector('.pcb');
+  cb.textContent=el.classList.contains('ck')?'✓':'';
+}
+
+function openAddRole(){
+  document.getElementById('rId').value='';
+  document.getElementById('roleModalTitle').textContent='Create role';
+  document.getElementById('rName').value='';
+  document.getElementById('permGrid').innerHTML=buildPermGrid([]);
+  OM('roleModal');
+}
+
+function openEditRole(id){
+  const r=AR.find(x=>x.id===id);if(!r)return;
+  document.getElementById('rId').value=r.id;
+  document.getElementById('roleModalTitle').textContent='Edit role';
+  document.getElementById('rName').value=r.name;
+  document.getElementById('permGrid').innerHTML=buildPermGrid(Array.isArray(r.permissions)?r.permissions:[]);
+  OM('roleModal');
+}
+
+async function saveRole(){
+  const id=document.getElementById('rId').value;
+  const name=document.getElementById('rName').value.trim();
+  if(!name){showToast('Role name required','error');return;}
+  const perms=[...document.querySelectorAll('#permGrid .pi.ck')].map(el=>{
+    const btn=el.getAttribute('onclick');
+    return btn.match(/'([^']+)'\)$/)?.[1];
+  }).filter(Boolean);
+  if(id)await sb.from('roles').update({name,permissions:perms}).eq('id',id);
+  else await sb.from('roles').insert({name,permissions:perms,is_system:false});
+  showToast(id?'Role updated':'Role created','success');
+  CM('roleModal');await loadBase();renderRoles();
+}
+
+async function delRole(id,name){
+  if(!confirm(`Delete role "${name}"? Users with this role will lose their permissions.`))return;
+  await sb.from('roles').delete().eq('id',id);
+  await loadBase();showToast('Role deleted','success');renderRoles();
+}
+
+// ══════════════════════════════════
+// ADMIN
+// ══════════════════════════════════
+async function renderAdmin(){
+  const el=document.getElementById('pageAdmin');
+  await loadBase();
+  el.innerHTML=`
+    <div class="phr">
+      <div><div class="pt">Manage team</div><div class="ps">${AU.length} members</div></div>
+      <button class="btn btn-a" onclick="openAddUser()">+ Add member</button>
+    </div>
+    <div class="card">
+      ${AU.map(u=>{
+        const r=AR.find(x=>x.id===u.role_id);
+        return`<div class="user-row">
+          <div class="uav">${INI(u.name)}</div>
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:500">${u.name}</div>
+            <div style="font-size:10.5px;color:var(--text3)">${u.email} · ${r?.name||u.role||'BA'} · target: ${u.volume_target} docs/mo</div>
+          </div>
+          <span style="font-size:10.5px;background:var(--ag);color:var(--accent);padding:2px 7px;border-radius:10px">${r?.name||u.role||'BA'}</span>
+          <button class="btn btn-g btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
+          ${u.id!==CU.id?`<button class="btn btn-d btn-sm" onclick="delUser('${u.id}','${u.name}')">Remove</button>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function openAddUser(){
+  document.getElementById('uId').value='';
+  document.getElementById('userModalTitle').textContent='Add member';
+  ['uName','uEmail','uPin'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('uTarget').value='4';
+  document.getElementById('pinHint').textContent='Required for new accounts';
+  fillRoleSel('');OM('userModal');
+}
+
+function openEditUser(id){
+  const u=AU.find(x=>x.id===id);if(!u)return;
+  document.getElementById('uId').value=u.id;
+  document.getElementById('userModalTitle').textContent='Edit member';
+  document.getElementById('uName').value=u.name;
+  document.getElementById('uEmail').value=u.email;
+  document.getElementById('uPin').value='';
+  document.getElementById('uTarget').value=u.volume_target;
+  document.getElementById('pinHint').textContent='Leave blank to keep current PIN';
+  fillRoleSel(u.role_id);OM('userModal');
+}
+
+function fillRoleSel(selId){
+  document.getElementById('uRoleId').innerHTML=AR.map(r=>`<option value="${r.id}" ${r.id===selId?'selected':''}>${r.name}</option>`).join('');
+}
+
+async function saveUser(){
+  const id=document.getElementById('uId').value;
+  const name=document.getElementById('uName').value.trim();
+  const email=document.getElementById('uEmail').value.trim().toLowerCase();
+  const pin=document.getElementById('uPin').value.trim();
+  const roleId=document.getElementById('uRoleId').value;
+  const target=parseInt(document.getElementById('uTarget').value)||4;
+  if(!name||!email){showToast('Name and email required','error');return;}
+  if(!id&&(pin.length!==4||!/^\d{4}$/.test(pin))){showToast('4-digit PIN required','error');return;}
+  if(id){
+    const upd={name,email,role_id:roleId,volume_target:target};
+    if(pin.length===4)upd.pin_hash=pin;
+    await sb.from('users').update(upd).eq('id',id);
+    if(CU.id===id){CU={...CU,...upd};sessionStorage.setItem('ba_user',JSON.stringify(CU));}
+    showToast('Updated','success');
+  }else{
+    await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,volume_target:target,role:'ba'});
+    showToast('Member added','success');
+  }
+  CM('userModal');await loadBase();renderAdmin();
+}
+
+async function delUser(id,name){
+  if(!confirm(`Remove ${name}? Their tasks will be preserved.`))return;
+  await sb.from('users').delete().eq('id',id);
+  await loadBase();showToast(`${name} removed`,'success');renderAdmin();
+}
+
+// ══════════════════════════════════
+// CHANGE PIN
+// ══════════════════════════════════
+function openChangePIN(){
+  ['curPin','newPin1','newPin2'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pinErr').textContent='';
+  OM('pinModal');setTimeout(()=>document.getElementById('curPin').focus(),100);
+}
+
+async function savePin(){
+  const cur=document.getElementById('curPin').value;
+  const p1=document.getElementById('newPin1').value;
+  const p2=document.getElementById('newPin2').value;
+  const err=document.getElementById('pinErr');
+  err.textContent='';
+  if(cur!==CU.pin_hash){err.textContent='Current PIN incorrect.';return;}
+  if(!/^\d{4}$/.test(p1)){err.textContent='New PIN must be 4 digits.';return;}
+  if(p1!==p2){err.textContent='PINs do not match.';return;}
+  if(p1===cur){err.textContent='New PIN must differ.';return;}
+  await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
+  CU.pin_hash=p1;sessionStorage.setItem('ba_user',JSON.stringify(CU));
+  CM('pinModal');showToast('PIN updated','success');
+}
+
+
+// ══════════════════════════════════
+// TASK LOCK / OVERRIDE
+// ══════════════════════════════════
+function overrideTask(tid) {
+  if (!window._overrideIds) window._overrideIds = new Set();
+  window._overrideIds.add(tid);
+  logA(tid, CU.id, 'override', 'Completed', 'Unlocked by override', 'edited', null);
+  showToast('Task unlocked for editing','success');
+  refreshPage();
+}
+
+// ══════════════════════════════════
+// TASK REMARKS (comment thread)
+// ══════════════════════════════════
+async function toggleRemarks(btn, tid) {
+  const row = document.getElementById(`remarks-row-${tid}`);
+  const panel = document.getElementById(`remarks-${tid}`);
+  if (!row) return;
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = 'table-row';
+  panel.innerHTML = `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;color:var(--text3);font-size:11px"><div class="sp"></div> Loading remarks...</div>`;
+  const { data: remarks } = await sb.from('task_remarks').select('*').eq('task_id', tid).order('created_at', { ascending: false });
+  const R = remarks || [];
+  const taskRow = document.getElementById(`row-${tid}`);
+  const isLocked = taskRow?.classList.contains('task-locked');
+  const canAdd = !isLocked || can('override_completed_task');
+  panel.innerHTML = `
+    <div class="remarks-panel">
+      <div style="font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Remarks history (${R.length})</div>
+      ${canAdd ? `<div class="remark-input-row">
+        <textarea class="remark-input" id="ri-${tid}" placeholder="Add a remark or update..." rows="2" style="resize:none;flex:1"></textarea>
+        <button class="btn btn-a btn-sm" onclick="addRemark('${tid}')">Post</button>
+      </div>` : `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">🔒 Task completed — add remark requires override permission</div>`}
+      <div id="remarks-list-${tid}">
+        ${R.length === 0 ? `<div style="font-size:11px;color:var(--text3);padding:8px 0">No remarks yet.</div>` :
+          R.map(r => `<div class="remark-entry">
+            <div><span class="remark-author">${r.user_name}</span><span class="remark-time">${new Date(r.created_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>
+            <div class="remark-text">${r.content.replace(/\n/g,'<br>')}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function addRemark(tid) {
+  const inp = document.getElementById(`ri-${tid}`);
+  const content = inp?.value?.trim();
+  if (!content) return;
+  const { error } = await sb.from('task_remarks').insert({ task_id: tid, user_id: CU.id, user_name: CU.name, content });
+  if (error) { showToast('Error adding remark', 'error'); return; }
+  inp.value = '';
+  // Reload remarks list
+  const { data: remarks } = await sb.from('task_remarks').select('*').eq('task_id', tid).order('created_at', { ascending: false });
+  const list = document.getElementById(`remarks-list-${tid}`);
+  if (list) list.innerHTML = (remarks||[]).map(r => `<div class="remark-entry">
+    <div><span class="remark-author">${r.user_name}</span><span class="remark-time">${new Date(r.created_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>
+    <div class="remark-text">${r.content.replace(/\n/g,'<br>')}</div>
+  </div>`).join('');
+  showToast('Remark added', 'success');
+}
+
+// ══════════════════════════════════
+// AUDIT LOG HELPER
+// ══════════════════════════════════
+async function logA(taskId,baId,field,oldVal,newVal,flagType,daysDelta){
+  await sb.from('task_audit').insert({task_id:taskId,ba_id:baId,changed_by_id:CU.id,changed_by_name:CU.name,field_name:field,old_value:String(oldVal||''),new_value:String(newVal||''),flag_type:flagType,days_delta:daysDelta});
+}
+
+// ══════════════════════════════════
+// MODAL & TOAST HELPERS
+// ══════════════════════════════════
+function OM(id){document.getElementById(id).classList.add('open');}
+function CM(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+let _tt;
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;clearTimeout(_tt);_tt=setTimeout(()=>{t.className=''},2500);}
+
+function refreshPage(){
+  const map={MyTasks:renderMyTasks,MyKPI:renderMyKPI,TeamBoard:renderTeamBoard,Projects:renderProjects,Dashboard:renderDashboard,Workload:renderWorkload,AIAdvisor:renderAIAdvisor,AllTasks:renderAllTasks,AuditLog:renderAuditLog,KPI:renderKPI,Import:renderImport,Roles:renderRoles,Admin:renderAdmin,Analytics:renderAnalytics};
+  if(map[CP])map[CP]();
+}
+
+
+// ══════════════════════════════════
+// ANALYTICS REPORT
+// ══════════════════════════════════
+let _charts = {};
+
+function destroyCharts() {
+  Object.values(_charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _charts = {};
+}
+
+async function renderAnalytics() {
+  destroyCharts();
+  const el = document.getElementById('pageAnalytics');
+  el.innerHTML = `<div class="lov"><div class="sp"></div></div>`;
+  const { data: tasks } = await sb.from('tasks').select('*').order('created_at', { ascending: true });
+  const allT = tasks || [];
+  const now = new Date();
+  const defFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const defTo = now.toISOString().slice(0,10);
+  el.innerHTML = `
+    <div class="phr"><div><div class="pt">Analytics</div><div class="ps">Performance insights across your BA team</div></div>
+      <button class="btn btn-g btn-sm" onclick="window.print()">⎙ Print / PDF</button>
+    </div>
+    <div class="date-range-bar">
+      <span class="date-lbl">View</span>
+      ${['This week','This month','Last month','Last 3 months'].map((l,i)=>`<button class="fc ${i===1?'active':''}" onclick="setDateRange(this,'${l}')">${l}</button>`).join('')}
+      <span class="date-lbl" style="margin-left:8px">Custom</span>
+      <input type="date" class="si" id="drFrom" value="${defFrom}" onchange="applyCustomRange()">
+      <span style="color:var(--text3);font-size:12px">to</span>
+      <input type="date" class="si" id="drTo" value="${defTo}" onchange="applyCustomRange()">
+      <select class="si" id="baSel" onchange="refreshAnalytics()" style="min-width:120px">
+        <option value="all">All BAs</option>
+        ${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="analyticsBody"></div>`;
+  window._analyticsData = allT;
+  applyCustomRange();
+}
+
+function setDateRange(btn, label) {
+  document.querySelectorAll('#pageAnalytics .fc').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  const now = new Date();
+  let from, to = now.toISOString().slice(0,10);
+  if (label === 'This week') {
+    const d = new Date(now); d.setDate(d.getDate() - d.getDay());
+    from = d.toISOString().slice(0,10);
+  } else if (label === 'This month') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  } else if (label === 'Last month') {
+    from = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
+    to = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
+  } else if (label === 'Last 3 months') {
+    from = new Date(now.getFullYear(), now.getMonth()-3, 1).toISOString().slice(0,10);
+  }
+  document.getElementById('drFrom').value = from;
+  document.getElementById('drTo').value = to;
+  refreshAnalytics();
+}
+
+function applyCustomRange() {
+  document.querySelectorAll('#pageAnalytics .fc').forEach(c => c.classList.remove('active'));
+  refreshAnalytics();
+}
+
+function refreshAnalytics() {
+  const from = document.getElementById('drFrom')?.value;
+  const to = document.getElementById('drTo')?.value;
+  const baId = document.getElementById('baSel')?.value || 'all';
+  if (!from || !to) return;
+  destroyCharts();
+  const allT = window._analyticsData || [];
+  const fromD = new Date(from), toD = new Date(to + 'T23:59:59');
+  // Filter by date range (use updated_at for completion, created_at for creation)
+  let members = baId === 'all' ? AU : AU.filter(u => u.id === baId);
+  const filtered = allT.filter(t => {
+    const d = new Date(t.updated_at || t.created_at);
+    return d >= fromD && d <= toD;
+  });
+  const created = allT.filter(t => {
+    const d = new Date(t.created_at);
+    return d >= fromD && d <= toD;
+  });
+  drawAnalytics(members, filtered, created, from, to);
+}
+
+function drawAnalytics(members, tasks, createdTasks, from, to) {
+  const body = document.getElementById('analyticsBody');
+  if (!body) return;
+  const colors = ['#7c6cfa','#3ecf8e','#f6a623','#4da6ff','#f56565','#a78bfa','#34d399','#fbbf24','#60a5fa','#f87171','#c084fc','#6ee7b7'];
+
+  // ── Chart 1: Task completion per BA (bar) ──
+  const completedByBA = members.map(u => tasks.filter(t => t.ba_id === u.id && t.status === 'Completed').length);
+  // ── Chart 2: New tasks created per BA (bar) ──
+  const createdByBA = members.map(u => createdTasks.filter(t => t.ba_id === u.id).length);
+  // ── Chart 3: Status distribution stacked ──
+  const statusData = {
+    'Completed': members.map(u => tasks.filter(t=>t.ba_id===u.id&&t.status==='Completed').length),
+    'In Progress': members.map(u => tasks.filter(t=>t.ba_id===u.id&&t.status==='In Progress').length),
+    'Pending': members.map(u => tasks.filter(t=>t.ba_id===u.id&&t.status==='Pending').length),
+    'On Hold': members.map(u => tasks.filter(t=>t.ba_id===u.id&&t.status==='On Hold').length),
+  };
+  // ── Chart 4: Avg completion days by task type ──
+  const DOC_TRACKED = ['User Story Doc','CR Addendum Doc','Requirement Gathering','App Testing'];
+  const avgDays = DOC_TRACKED.map(type => {
+    const done = tasks.filter(t => t.task_type === type && t.status === 'Completed' && t.created_at && t.updated_at);
+    if (!done.length) return 0;
+    const avg = done.reduce((s,t) => s + Math.max(0, DD(t.created_at, t.updated_at)), 0) / done.length;
+    return Math.round(avg * 10) / 10;
+  });
+  // ── Chart 5: KPI scores per BA ──
+  const kpiScores = members.map(u => {
+    const s = calcKPI(u, tasks);
+    return { name: u.name, quality: s.qScore, timeliness: s.tScore, volume: s.vScore, coverage: s.cScore, total: s.total };
+  });
+  // ── Chart 6: Completion trend over time (weekly buckets) ──
+  const weekBuckets = {};
+  tasks.filter(t=>t.status==='Completed').forEach(t => {
+    const d = new Date(t.updated_at);
+    const wk = `${d.getFullYear()}-W${String(Math.ceil(((d - new Date(d.getFullYear(),0,1))/86400000 + new Date(d.getFullYear(),0,1).getDay()+1)/7)).padStart(2,'0')}`;
+    weekBuckets[wk] = (weekBuckets[wk]||0)+1;
+  });
+  const wkLabels = Object.keys(weekBuckets).sort();
+  const wkData = wkLabels.map(k => weekBuckets[k]);
+  // ── Chart 7: Review pass/rework rate ──
+  const rvMembers = members.map(u => {
+    const docs = tasks.filter(t => t.ba_id===u.id && DOC_TYPES.includes(t.task_type) && t.review_result);
+    return { name: u.name, pass: docs.filter(t=>t.review_result==='Pass').length, rework: docs.filter(t=>t.review_result==='Rework').length };
+  }).filter(u => u.pass+u.rework > 0);
+
+  const labels = members.map(u => u.name.split(' ')[0]);
+  const chartH = n => Math.max(n * 36 + 60, 160);
+
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="chart-card"><div class="chart-title">Tasks completed per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch1" role="img" aria-label="Tasks completed per BA bar chart">Completed tasks by team member.</canvas></div></div>
+      <div class="chart-card"><div class="chart-title">New tasks created per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch2" role="img" aria-label="Tasks created per BA">New tasks created by team member.</canvas></div></div>
+    </div>
+    <div class="chart-card"><div class="chart-title">Task status distribution per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch3" role="img" aria-label="Status distribution stacked bar chart">Status breakdown per team member.</canvas></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="chart-card"><div class="chart-title">Average completion days by task type</div><div class="chart-wrap" style="height:220px"><canvas id="ch4" role="img" aria-label="Average days to complete by task type">Average days from creation to completion.</canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Review pass vs rework rate</div><div class="chart-wrap" style="height:${Math.max(rvMembers.length*36+60,160)}px"><canvas id="ch5" role="img" aria-label="Review results per BA">Pass and rework counts per BA.</canvas></div></div>
+    </div>
+    <div class="chart-card"><div class="chart-title">Task completion trend (weekly)</div><div class="chart-wrap" style="height:200px"><canvas id="ch6" role="img" aria-label="Weekly task completion trend">Completed tasks per week.</canvas></div></div>
+    <div class="chart-card"><div class="chart-title">KPI score breakdown per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch7" role="img" aria-label="KPI scores per BA stacked">KPI pillar scores per team member.</canvas></div></div>
+  `;
+
+  const opts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} };
+  const hBarOpts = { ...opts, indexAxis:'y', scales:{x:{stacked:false,ticks:{color:'#8888a0',font:{size:10}}},y:{ticks:{color:'#8888a0',font:{size:10}}}} };
+
+  // ch1 — completed
+  _charts.ch1 = new Chart(document.getElementById('ch1'),{type:'bar',data:{labels,datasets:[{label:'Completed',data:completedByBA,backgroundColor:colors.slice(0,labels.length),borderRadius:4}]},options:{...hBarOpts}});
+  // ch2 — created
+  _charts.ch2 = new Chart(document.getElementById('ch2'),{type:'bar',data:{labels,datasets:[{label:'Created',data:createdByBA,backgroundColor:'#4da6ff',borderRadius:4}]},options:{...hBarOpts}});
+  // ch3 — status distribution stacked
+  _charts.ch3 = new Chart(document.getElementById('ch3'),{type:'bar',data:{labels,datasets:[
+    {label:'Completed',data:statusData['Completed'],backgroundColor:'#3ecf8e',borderRadius:2},
+    {label:'In Progress',data:statusData['In Progress'],backgroundColor:'#4da6ff',borderRadius:2},
+    {label:'Pending',data:statusData['Pending'],backgroundColor:'#f6a623',borderRadius:2},
+    {label:'On Hold',data:statusData['On Hold'],backgroundColor:'#5a5a6a',borderRadius:2},
+  ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
+  // ch4 — avg days
+  _charts.ch4 = new Chart(document.getElementById('ch4'),{type:'bar',data:{labels:DOC_TRACKED,datasets:[{label:'Avg days',data:avgDays,backgroundColor:['#7c6cfa','#3ecf8e','#f6a623','#4da6ff'],borderRadius:4}]},options:{...opts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8888a0',font:{size:10}}},y:{ticks:{color:'#8888a0',font:{size:10}},title:{display:true,text:'Days',color:'#55556a',font:{size:10}}}}}});
+  // ch5 — pass/rework
+  if(rvMembers.length){
+    _charts.ch5 = new Chart(document.getElementById('ch5'),{type:'bar',data:{labels:rvMembers.map(u=>u.name.split(' ')[0]),datasets:[
+      {label:'Pass',data:rvMembers.map(u=>u.pass),backgroundColor:'#3ecf8e',borderRadius:3},
+      {label:'Rework',data:rvMembers.map(u=>u.rework),backgroundColor:'#f56565',borderRadius:3},
+    ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{ticks:{color:'#8888a0',font:{size:10}}},y:{ticks:{color:'#8888a0',font:{size:10}}}}}});
+  } else {
+    document.getElementById('ch5').parentElement.innerHTML='<div class="es">No review data in range</div>';
+  }
+  // ch6 — trend line
+  if(wkLabels.length){
+    _charts.ch6 = new Chart(document.getElementById('ch6'),{type:'line',data:{labels:wkLabels,datasets:[{label:'Completed',data:wkData,borderColor:'#7c6cfa',backgroundColor:'rgba(124,108,250,0.1)',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:'#7c6cfa'}]},options:{...opts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8888a0',font:{size:9},maxRotation:45}},y:{ticks:{color:'#8888a0',font:{size:10}},beginAtZero:true}}}});
+  } else {
+    document.getElementById('ch6').parentElement.innerHTML='<div class="es">No completion data in range</div>';
+  }
+  // ch7 — KPI stacked
+  _charts.ch7 = new Chart(document.getElementById('ch7'),{type:'bar',data:{labels:kpiScores.map(s=>s.name.split(' ')[0]),datasets:[
+    {label:'Quality (35)',data:kpiScores.map(s=>s.quality),backgroundColor:'#7c6cfa',borderRadius:2},
+    {label:'Timeliness (30)',data:kpiScores.map(s=>s.timeliness),backgroundColor:'#3ecf8e',borderRadius:2},
+    {label:'Volume (20)',data:kpiScores.map(s=>s.volume),backgroundColor:'#f6a623',borderRadius:2},
+    {label:'Coverage (15)',data:kpiScores.map(s=>s.coverage),backgroundColor:'#4da6ff',borderRadius:2},
+  ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,max:100,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
+}
+
+// ══════════════════════════════════
+// START
+// ══════════════════════════════════
+init();
+</script>
+</body>
+</html>
