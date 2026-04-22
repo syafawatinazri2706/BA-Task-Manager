@@ -92,6 +92,8 @@ input,select,textarea{font-family:var(--font)}
 .b-cancelled{background:var(--rbg);color:var(--red)}
 .b-pass{background:var(--gbg);color:var(--green)}
 .b-rework{background:var(--rbg);color:var(--red)}
+.b-review{background:rgba(167,139,250,0.15);color:#a78bfa}
+.s-review{background:rgba(167,139,250,0.15);color:#a78bfa;border-color:rgba(167,139,250,0.3)}
 .tw{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th{text-align:left;padding:5px 8px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
@@ -285,6 +287,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
     <div id="pageRoles" class="page"></div>
     <div id="pageAdmin" class="page"></div>
     <div id="pageAnalytics" class="page"></div>
+    <div id="pageSettings" class="page"></div>
   </main>
 </div>
 
@@ -295,11 +298,11 @@ tr:hover td{background:rgba(255,255,255,.012)}
     <div class="mb">
       <input type="hidden" id="tId"><input type="hidden" id="tBaId"><input type="hidden" id="tProjId">
       <div class="fr2">
-        <div class="ff"><label class="flb">Assigned to</label><select class="fsel" id="tAssignee" onchange="onAssigneeChange()"></select></div>
-        <div class="ff"><label class="flb">Project</label><select class="fsel" id="tProjSel" onchange="document.getElementById('tProjId').value=this.value"></select></div>
+        <div class="ff"><label class="flb">Assigned to <span style="color:var(--red)">*</span></label><select class="fsel" id="tAssignee" onchange="onAssigneeChange()"></select></div>
+        <div class="ff"><label class="flb">Project <span style="color:var(--red)">*</span></label><select class="fsel" id="tProjSel" onchange="document.getElementById('tProjId').value=this.value"></select></div>
       </div>
       <div class="fr2">
-        <div class="ff"><label class="flb">Task type</label><select class="fsel" id="tType" onchange="chkReview()">
+        <div class="ff"><label class="flb">Task type <span style="color:var(--red)">*</span></label><select class="fsel" id="tType" onchange="onTaskTypeChange()">
           <option>Requirement Gathering</option><option>Gap Analysis</option><option>Market Research</option>
           <option>Mockup/Wireframe</option><option>User Story Doc</option><option>CR Addendum Doc</option>
           <option>Development Support</option><option>App Testing</option><option>User Guide Doc</option>
@@ -308,20 +311,28 @@ tr:hover td{background:rgba(255,255,255,.012)}
           <option>Meeting/Discussion</option><option>Process Flow</option><option>Demo</option>
           <option>Review UI</option><option>Review Doc</option><option>Others</option>
         </select></div>
-        <div class="ff"><label class="flb">Status</label><select class="fsel" id="tStatus">
-          <option>To Do</option><option>In Progress</option><option>Pending</option><option>On Hold</option><option>Completed</option><option>Cancelled</option>
+        <div class="ff"><label class="flb">Status <span style="color:var(--red)">*</span></label><select class="fsel" id="tStatus" onchange="onStatusChange()">
+          <option>To Do</option><option>In Progress</option><option>Pending</option><option>On Hold</option><option>Review</option><option>Completed</option><option>Cancelled</option>
         </select></div>
       </div>
-      <div class="ff"><label class="flb">Description</label><input type="text" class="finp" id="tDesc" placeholder="Brief description"></div>
-      <div class="fr2">
-        <div class="ff"><label class="flb">ETA</label><input type="date" class="finp" id="tEta"></div>
-        <div class="ff" id="reviewFF" style="display:none"><label class="flb">Review result</label>
-          <select class="fsel" id="tReview"><option value="">— Not reviewed —</option><option value="Pass">Pass</option><option value="Rework">Rework</option></select>
-        </div>
+      <div class="ff"><label class="flb">Description <span style="color:var(--red)">*</span></label><input type="text" class="finp" id="tDesc" placeholder="Brief description of this task"></div>
+      <div class="ff"><label class="flb">ETA <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="tEta"></div>
+      <div class="ff" id="proofUrlFF"><label class="flb" id="proofUrlLabel">Proof / Document URL <span style="color:var(--red)" id="proofUrlReq">*</span></label>
+        <input type="url" class="finp" id="tProofUrl" placeholder="https://drive.google.com/...">
+        <div class="fhint" id="proofUrlHint">GDrive link to signed document required for User Story Doc / CR Addendum Doc</div>
       </div>
-      <div class="ff"><label class="flb">Remarks <span class="opt">(optional)</span></label><textarea class="fta" id="tRemarks" placeholder="Blockers, notes..."></textarea></div>
+      <div class="ff"><label class="flb">Remarks <span class="opt">(optional)</span></label><textarea class="fta" id="tRemarks" placeholder="Blockers, notes, Jira links..."></textarea></div>
     </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('taskModal')">Cancel</button><button class="btn btn-a" onclick="saveTask()" id="saveTaskBtn">Save task</button></div>
+  </div>
+</div>
+
+<!-- ═══ TASK HISTORY MODAL ═══ -->
+<div class="mo" id="historyModal">
+  <div class="modal" style="width:620px">
+    <div class="mh"><div class="mtt">Task history</div><button class="mx" onclick="CM('historyModal')">✕</button></div>
+    <div class="mb" id="historyBody" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('historyModal')">Close</button></div>
   </div>
 </div>
 
@@ -454,7 +465,7 @@ let chatHistory = [];
 
 const TASK_TYPES = ['Requirement Gathering','Gap Analysis','Market Research','Mockup/Wireframe','User Story Doc','CR Addendum Doc','Development Support','App Testing','User Guide Doc','UAT Script','UAT Session','Training','Google Analytics','Production Verification','Production Support','Meeting/Discussion','Process Flow','Demo','Review UI','Review Doc','Others'];
 const DOC_TYPES = ['User Story Doc','CR Addendum Doc'];
-const TASK_STATUSES = ['To Do','In Progress','Pending','On Hold','Completed','Cancelled'];
+const TASK_STATUSES = ['To Do','In Progress','Pending','On Hold','Review','Completed','Cancelled'];
 const PROJ_STATUSES = ['Active CR','In Progress','On Hold','Maintenance','Cancelled','Completed'];
 const ALL_PERMS = [
   {key:'view_dashboard',label:'View dashboard'},
@@ -478,6 +489,8 @@ const ALL_PERMS = [
   {key:'import_data',label:'Import data'},
   {key:'view_workload',label:'View workload radar'},
   {key:'override_completed_task',label:'Override completed tasks'},
+  {key:'view_metrics',label:'View rework metrics'},
+  {key:'manage_settings',label:'Manage task weightage settings'},
 ];
 
 // Workload complexity weights
@@ -648,6 +661,7 @@ function buildNav() {
     if (can('manage_users')) html += niBtn('Admin','<circle cx="8" cy="5" r="3"/><path d="M1,14 Q1,10 8,10 Q15,10 15,14"/>','Manage team');
     if (can('manage_roles')) html += niBtn('Roles','<rect x="1" y="1" width="5" height="5" rx="1"/><rect x="1" y="9" width="5" height="5" rx="1"/><line x1="9" y1="3.5" x2="15" y2="3.5"/><line x1="9" y1="11.5" x2="15" y2="11.5"/>','Roles & permissions');
     if (can('import_data')) html += niBtn('Import','<polyline points="8,1 8,10"/><polyline points="4,6 8,10 12,6"/><rect x="2" y="12" width="12" height="3" rx="1"/>','Import data');
+    if (can('manage_settings')) html += niBtn('Settings','<circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4"/>','Task settings');
     html += `</div>`;
   }
   nav.innerHTML = html;
@@ -663,7 +677,7 @@ function navigateTo(page) {
     MyTasks: renderMyTasks, MyKPI: renderMyKPI, TeamBoard: renderTeamBoard,
     Projects: renderProjects, Dashboard: renderDashboard, Workload: renderWorkload,
     AIAdvisor: renderAIAdvisor, AllTasks: renderAllTasks, AuditLog: renderAuditLog,
-    KPI: renderKPI, Import: renderImport, Roles: renderRoles, Admin: renderAdmin, Analytics: renderAnalytics
+    KPI: renderKPI, Import: renderImport, Roles: renderRoles, Admin: renderAdmin, Analytics: renderAnalytics, Settings: renderSettings
   };
   if (renderers[page]) renderers[page]();
 }
@@ -677,15 +691,41 @@ function OD(eta,status) {
   return new Date(eta) < new Date(new Date().toDateString());
 }
 function DD(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
-function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
+function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Review':'s-review','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
 function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
 function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
-function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending'].includes(t.status)).reduce((s,t)=>s+(W_WEIGHTS[t.task_type]||W_DEFAULT),0); }
+function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)).reduce((s,t)=>s+(getWeight(t.task_type)),0); }
+function getWeight(type){ return parseInt(WS['weight_'+type.toLowerCase().replace(/[^a-z]/g,'_')]||WS['weight_default']||W_WEIGHTS[type]||W_DEFAULT); }
 function wlStatus(score){
   const gm = parseInt(WS.green_max||14), am = parseInt(WS.amber_max||25);
   if(score<=gm) return {label:'Available',cls:'wl-avail',color:'var(--green)'};
   if(score<=am) return {label:'Busy',cls:'wl-busy',color:'var(--amber)'};
   return {label:'Overloaded',cls:'wl-over',color:'var(--red)'};
+}
+
+// ── Business Day & Holiday Logic ──
+const _holidayCache = {};
+async function getMYHolidays(year) {
+  if (_holidayCache[year]) return _holidayCache[year];
+  try {
+    const r = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/MY`);
+    const data = await r.json();
+    _holidayCache[year] = new Set((data||[]).map(h=>h.date));
+  } catch(e) { _holidayCache[year] = new Set(); }
+  return _holidayCache[year];
+}
+async function bizDays(from, to) {
+  const a = new Date(from), b = new Date(to);
+  const years = new Set();
+  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)) years.add(d.getFullYear());
+  const holidays = new Set();
+  for(const y of years){ const h=await getMYHolidays(y); h.forEach(d=>holidays.add(d)); }
+  let count=0;
+  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
+    const dow=d.getDay(), ds=d.toISOString().slice(0,10);
+    if(dow!==0&&dow!==6&&!holidays.has(ds)) count++;
+  }
+  return count;
 }
 
 // ══════════════════════════════════
@@ -724,43 +764,41 @@ function filterMT(btn,s){
 
 function buildTT(tasks,filter,baId,canEdit) {
   if (!tasks.length) return `<div class="es">No tasks found</div>`;
-  const isMgr = can('mark_review_result');
+  const canMetrics = can('view_metrics');
   const canOverride = can('override_completed_task');
   const rows = tasks.map(t=>{
     const od=OD(t.eta,t.status);
     const isLocked = t.status==='Completed' && !window._overrideIds?.has(t.id);
-    const isDoc=DOC_TYPES.includes(t.task_type);
-    const rv = isDoc&&isMgr
-      ? `<select onchange="setRR('${t.id}',this.value)" ${isLocked?'disabled':''} style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10.5px;padding:2px 4px;${isLocked?'opacity:.4;cursor:not-allowed':''}">
-          <option value="" ${!t.review_result?'selected':''}>—</option>
-          <option value="Pass" ${t.review_result==='Pass'?'selected':''}>Pass</option>
-          <option value="Rework" ${t.review_result==='Rework'?'selected':''}>Rework</option>
-        </select>`
-      : (t.review_result?`<span class="badge b-${t.review_result.toLowerCase()}">${t.review_result}</span>`:'');
     const ba = baId==='all' ? `<td style="font-size:10.5px;color:var(--accent);font-weight:600">${AU.find(u=>u.id===t.ba_id)?.name||'?'}</td>` : '';
     const canEditThis = canEdit&&!isLocked&&(can('edit_task_any')||t.ba_id===CU.id);
     const edit = canEditThis ? `<button class="bic" onclick="openEditTask('${t.id}')" title="Edit">✎</button>` : '';
     const del = can('delete_task')&&!isLocked ? `<button class="bic btn-d" onclick="delTask('${t.id}')" title="Delete">✕</button>` : '';
     const overrideBtn = isLocked&&canOverride ? `<button class="bic" onclick="overrideTask('${t.id}')" title="Override lock" style="color:var(--amber);border-color:var(--amber)">⊘</button>` : '';
     const lockBadge = isLocked&&!canOverride ? `<span class="lock-badge">🔒</span>` : '';
-    const remarksBtn = `<button class="bic" onclick="toggleRemarks(this,'${t.id}')" title="Remarks/comments" style="color:var(--blue)">💬</button>`;
-    const statusCells = isLocked
-      ? `<td><span class="badge b-done">Completed</span> ${lockBadge}</td>`
-      : `<td><div class="sbs">${buildSB(t.id,t.status,canEdit&&(can('edit_task_any')||t.ba_id===CU.id))}</div></td>`;
+    const remarksBtn = `<button class="bic" onclick="toggleRemarks(this,'${t.id}')" title="Comments" style="color:var(--blue)">💬</button>`;
+    const histBtn = `<button class="bic" onclick="showTaskHistory('${t.id}')" title="View history" style="color:var(--text2)">⏱</button>`;
+    const reworkBadge = canMetrics && t.rework_count > 0 ? `<span style="background:var(--rbg);color:var(--red);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px">↩${t.rework_count}</span>` : '';
+    const proofLink = t.proof_url ? `<a href="${t.proof_url}" target="_blank" title="View proof doc" style="color:var(--green);font-size:11px;text-decoration:none">📄</a>` : '';
+    // Status cell — dropdown for editable, badge for locked/readonly
+    const statusCell = isLocked
+      ? `<td><span class="badge b-done">Completed</span>${lockBadge}</td>`
+      : canEditThis
+        ? `<td><select class="si" style="font-size:11px;padding:3px 6px" onchange="setStat('${t.id}',this.value)">${TASK_STATUSES.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></td>`
+        : `<td><span class="badge ${SC(t.status)?'b-'+SC(t.status).replace('s-',''):''}" style="font-size:10px">${t.status}</span></td>`;
     return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
       ${ba}
       <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
-      <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}</td>
+      <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
       <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">${t.eta||'—'}</td>
-      ${statusCells}
-      <td>${rv}</td>
-      <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${edit}${overrideBtn}${del}</td>
+      ${statusCell}
+      <td>${proofLink}</td>
+      <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
     </tr>
     <tr id="remarks-row-${t.id}" style="display:none"><td colspan="8" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
   }).join('');
   const bah = baId==='all'?'<th>BA</th>':'';
-  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Description</th><th>ETA</th><th>Status</th><th>Review</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Description</th><th>ETA</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function buildSB(tid,cur,interactive){
@@ -774,8 +812,22 @@ function buildSB(tid,cur,interactive){
 async function setStat(tid,ns){
   const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
   if(!t||t.status===ns)return;
-  await sb.from('tasks').update({status:ns,updated_at:new Date().toISOString()}).eq('id',tid);
+  // Block Completed for US/CR without proof_url
+  if(ns==='Completed'&&DOC_TYPES.includes(t.task_type)&&!t.proof_url){
+    showToast('Proof document URL required before completing this task','error');
+    // reset dropdown
+    const sel=document.querySelector(`select[onchange*="${tid}"]`);
+    if(sel)sel.value=t.status;
+    return;
+  }
+  let updates={status:ns,updated_at:new Date().toISOString()};
+  // Silent rework tracking: Review → In Progress for US/CR
+  if(DOC_TYPES.includes(t.task_type)&&t.status==='Review'&&ns==='In Progress'){
+    updates.rework_count=(t.rework_count||0)+1;
+  }
+  await sb.from('tasks').update(updates).eq('id',tid);
   await logA(tid,t.ba_id,'status',t.status,ns,'status_change',null);
+  if(updates.rework_count!==undefined) await logA(tid,t.ba_id,'rework_count',String(t.rework_count||0),String(updates.rework_count),'rework',null);
   showToast(`Status → ${ns}`,'success'); refreshPage();
 }
 
@@ -794,8 +846,9 @@ function openAddTask(baId, projId='') {
   document.getElementById('tId').value=''; document.getElementById('tBaId').value=baId; document.getElementById('tProjId').value=projId;
   document.getElementById('tType').value='User Story Doc'; document.getElementById('tDesc').value='';
   document.getElementById('tEta').value=''; document.getElementById('tStatus').value='To Do';
-  document.getElementById('tReview').value=''; document.getElementById('tRemarks').value='';
-  populateAssignee(baId); populateProjDrop(baId,projId); chkReview(); OM('taskModal');
+  document.getElementById('tRemarks').value=''; document.getElementById('tProofUrl').value='';
+  populateAssignee(baId); populateProjDrop(baId,projId); onTaskTypeChange(); OM('taskModal');
+  document.getElementById('taskModalTitle').textContent='Add task';
 }
 
 async function openEditTask(tid){
@@ -804,9 +857,32 @@ async function openEditTask(tid){
   document.getElementById('tId').value=t.id; document.getElementById('tBaId').value=t.ba_id; document.getElementById('tProjId').value=t.project_id||'';
   document.getElementById('tType').value=t.task_type; document.getElementById('tDesc').value=t.description;
   document.getElementById('tEta').value=t.eta||''; document.getElementById('tStatus').value=t.status;
-  document.getElementById('tReview').value=t.review_result||''; document.getElementById('tRemarks').value=t.remarks||'';
-  populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); chkReview(); OM('taskModal');
+  document.getElementById('tRemarks').value=t.remarks||''; document.getElementById('tProofUrl').value=t.proof_url||'';
+  populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); onTaskTypeChange(); OM('taskModal');
+  document.getElementById('taskModalTitle').textContent='Edit task';
 }
+
+function onTaskTypeChange(){
+  const type=document.getElementById('tType').value;
+  const isDoc=DOC_TYPES.includes(type);
+  const reqStar=document.getElementById('proofUrlReq');
+  const hint=document.getElementById('proofUrlHint');
+  if(isDoc){
+    reqStar.style.display='inline';
+    hint.style.color='var(--amber)';
+    hint.textContent='Required: GDrive link to signed document';
+  } else {
+    reqStar.style.display='none';
+    hint.style.color='var(--text3)';
+    hint.textContent='Optional: link to related document or Jira ticket';
+  }
+}
+
+function onStatusChange(){
+  // Could add workflow hints here if needed
+}
+
+function chkReview(){ onTaskTypeChange(); } // backward compat
 
 function populateAssignee(selId){
   const opts = can('create_task_any')?AU:AU.filter(u=>u.id===CU.id);
@@ -820,11 +896,9 @@ function onAssigneeChange(){
 }
 
 function populateProjDrop(baId,selId){
-  const projs = can('create_task_any')?AP:myProjects(baId||CU.id); // scoped to assigned/secondary/supervising
+  const projs = can('create_task_any')?AP:myProjects(baId||CU.id);
   document.getElementById('tProjSel').innerHTML=`<option value="">— Select project —</option>`+projs.map(p=>`<option value="${p.id}" ${p.id===selId?'selected':''}>${p.name}</option>`).join('');
 }
-
-function chkReview(){ document.getElementById('reviewFF').style.display=DOC_TYPES.includes(document.getElementById('tType').value)?'block':'none'; }
 
 async function saveTask(){
   const id=document.getElementById('tId').value;
@@ -835,21 +909,42 @@ async function saveTask(){
   const desc=document.getElementById('tDesc').value.trim();
   const eta=document.getElementById('tEta').value||null;
   const status=document.getElementById('tStatus').value;
-  const review=document.getElementById('tReview').value||null;
   const remarks=document.getElementById('tRemarks').value.trim();
-  if(!desc){showToast('Description required','error');return;}
+  const proofUrl=document.getElementById('tProofUrl').value.trim()||null;
+
+  // Mandatory field validation
+  if(!baId){showToast('Assignee is required','error');return;}
+  if(!projId){showToast('Project is required','error');return;}
+  if(!desc){showToast('Description is required','error');return;}
+  if(!eta){showToast('ETA is required','error');return;}
+  if(!status){showToast('Status is required','error');return;}
+
+  // Proof URL mandatory for US/CR when Completing
+  if(status==='Completed'&&DOC_TYPES.includes(type)&&!proofUrl){
+    showToast('Proof document URL is required to complete a User Story Doc or CR Addendum Doc','error');
+    document.getElementById('tProofUrl').style.borderColor='var(--red)';
+    document.getElementById('tProofUrl').focus();
+    return;
+  }
+
   const btn=document.getElementById('saveTaskBtn');
   btn.disabled=true;btn.textContent='Saving...';
   try{
     if(id){
       const {data:old}=await sb.from('tasks').select('*').eq('id',id).single();
-      await sb.from('tasks').update({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,review_result:review,remarks,updated_at:new Date().toISOString()}).eq('id',id);
+      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
+      // Silent rework: Review → In Progress for US/CR docs
+      if(DOC_TYPES.includes(type)&&old.status==='Review'&&status==='In Progress'){
+        updates.rework_count=(old.rework_count||0)+1;
+        await logA(id,baId,'rework_count',String(old.rework_count||0),String(updates.rework_count),'rework',null);
+      }
+      await sb.from('tasks').update(updates).eq('id',id);
       if(old.eta!==eta){let flag='edited',delta=null;if(old.eta&&eta){delta=DD(old.eta,eta);flag=delta>0?'delayed':delta<0?'expedited':'edited';}await logA(id,baId,'eta',old.eta||'',eta||'',flag,delta);}
       if(old.status!==status)await logA(id,baId,'status',old.status,status,'status_change',null);
-      if(review&&old.review_result!==review)await logA(id,baId,'review_result',old.review_result||'',review,review==='Rework'?'rework':'edited',null);
+      if(old.proof_url!==proofUrl&&proofUrl)await logA(id,baId,'proof_url',old.proof_url||'',proofUrl,'edited',null);
       showToast('Task updated','success');
     }else{
-      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,review_result:review,remarks}).select().single();
+      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,remarks,proof_url:proofUrl,rework_count:0}).select().single();
       await logA(nt.id,baId,'created','',status,'created',null);
       showToast('Task added','success');
     }
@@ -1866,6 +1961,43 @@ async function addRemark(tid) {
   showToast('Remark added', 'success');
 }
 
+async function showTaskHistory(tid) {
+  OM('historyModal');
+  const body = document.getElementById('historyBody');
+  body.innerHTML = `<div style="display:flex;align-items:center;gap:6px;padding:1rem;color:var(--text3);font-size:12px"><div class="sp"></div> Loading history...</div>`;
+  const [{data:task},{data:audit}] = await Promise.all([
+    sb.from('tasks').select('*').eq('id',tid).single(),
+    sb.from('task_audit').select('*').eq('task_id',tid).order('changed_at',{ascending:false})
+  ]);
+  if(!audit?.length){ body.innerHTML=`<div class="es">No history found for this task.</div>`; return; }
+  const flagIcons={'delayed':'🔴','expedited':'🟢','status_change':'🟣','created':'🔵','rework':'🟡','edited':'⚪','rework_count':'🟡'};
+  body.innerHTML = `
+    <div style="padding:.5rem 0;border-bottom:1px solid var(--border);margin-bottom:.75rem">
+      <div style="font-size:13px;font-weight:600">${task?.description||'Task'}</div>
+      <div style="font-size:11px;color:var(--text3)">${task?.project_name||''} · ${task?.task_type||''}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0">
+      ${audit.map((a,i)=>{
+        const ico=flagIcons[a.flag_type]||'⚪';
+        const time=new Date(a.changed_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        let detail='';
+        if(a.field_name==='status') detail=`<span style="color:var(--text3)">${a.old_value}</span> → <span style="color:var(--text);font-weight:500">${a.new_value}</span>`;
+        else if(a.field_name==='eta') detail=`ETA: <span style="color:var(--text3)">${a.old_value||'none'}</span> → <span style="font-weight:500">${a.new_value||'none'}</span>${a.days_delta?` <span style="color:${a.days_delta>0?'var(--red)':'var(--green)'}">(${a.days_delta>0?'+':''}${a.days_delta}d)</span>`:''}`;
+        else if(a.field_name==='proof_url') detail=`Proof doc added`;
+        else if(a.field_name==='rework_count') detail=`Rework count → ${a.new_value}`;
+        else if(a.field_name==='created') detail=`Task created with status <strong>${a.new_value}</strong>`;
+        else detail=`${a.field_name}: ${a.old_value||'—'} → ${a.new_value||'—'}`;
+        return `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);${i===0?'':''}">
+          <div style="font-size:14px;flex-shrink:0;margin-top:1px">${ico}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px">${detail}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">${a.changed_by_name} · ${time}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
 // ══════════════════════════════════
 // AUDIT LOG HELPER
 // ══════════════════════════════════
@@ -1925,7 +2057,8 @@ async function renderAnalytics() {
     </div>
     <div id="analyticsBody"></div>`;
   window._analyticsData = allT;
-  applyCustomRange();
+  // Small delay to ensure DOM is ready before drawing charts
+  setTimeout(()=>refreshAnalytics(), 50);
 }
 
 function setDateRange(btn, label) {
@@ -2074,6 +2207,76 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     {label:'Volume (20)',data:kpiScores.map(s=>s.volume),backgroundColor:'#f6a623',borderRadius:2},
     {label:'Coverage (15)',data:kpiScores.map(s=>s.coverage),backgroundColor:'#4da6ff',borderRadius:2},
   ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,max:100,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
+}
+
+// ══════════════════════════════════
+// SETTINGS PAGE
+// ══════════════════════════════════
+async function renderSettings(){
+  const el=document.getElementById('pageSettings');
+  el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
+  await loadBase();
+  // Build weight keys for all task types
+  const weightKeys=TASK_TYPES.map(t=>({type:t,key:'weight_'+t.toLowerCase().replace(/[^a-z0-9]/g,'_')}));
+  const wlKeys=[
+    {key:'green_max',label:'Green threshold (Available up to)',hint:'Points — below this = Available'},
+    {key:'amber_max',label:'Amber threshold (Busy up to)',hint:'Points — below this = Busy, above = Overloaded'},
+  ];
+  const stateHolidays=(WS.state_holidays||'').split(',').filter(Boolean).join('\n');
+  el.innerHTML=`
+    <div class="ph"><div class="pt">Task settings</div><div class="ps">Configure weightage and workload thresholds</div></div>
+    <div class="card">
+      <div class="ct">Workload thresholds</div>
+      ${wlKeys.map(w=>`<div class="ff"><label class="flb">${w.label}</label>
+        <input type="number" class="finp" id="ws_${w.key}" value="${WS[w.key]||''}" min="1" max="200" style="max-width:100px">
+        <div class="fhint">${w.hint}</div></div>`).join('')}
+      <button class="btn btn-a btn-sm" onclick="saveThresholds()">Save thresholds</button>
+    </div>
+    <div class="card">
+      <div class="ct">Task type weightage <span style="font-size:10px;font-weight:400;color:var(--text3)">(used for workload score calculation)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:.85rem">
+        ${weightKeys.map(w=>`<div class="ff" style="margin:0"><label class="flb" style="font-size:9.5px">${w.type}</label>
+          <input type="number" class="finp" id="ws_${w.key}" value="${WS[w.key]||W_WEIGHTS[w.type]||W_DEFAULT}" min="1" max="10" style="max-width:70px;padding:4px 8px;font-size:12px"></div>`).join('')}
+      </div>
+      <div class="fhint" style="margin-bottom:.75rem">Higher = more complex. Default = 1. User Story Doc / CR = 3 recommended.</div>
+      <button class="btn btn-a btn-sm" onclick="saveWeightage()">Save weightage</button>
+    </div>
+    <div class="card">
+      <div class="ct">Malaysian state holidays override <span style="font-size:10px;font-weight:400;color:var(--text3)">(for business day calculation)</span></div>
+      <div class="fhint" style="margin-bottom:.5rem">Federal holidays are fetched automatically. Add state-specific holidays manually (one per line, format: YYYY-MM-DD)</div>
+      <textarea class="fta" id="ws_state_holidays" style="min-height:100px;font-family:var(--mono);font-size:12px" placeholder="2026-02-09&#10;2026-09-12">${stateHolidays}</textarea>
+      <button class="btn btn-a btn-sm" style="margin-top:.5rem" onclick="saveStateHolidays()">Save holidays</button>
+    </div>`;
+}
+
+async function saveThresholds(){
+  const keys=['green_max','amber_max'];
+  for(const key of keys){
+    const val=document.getElementById(`ws_${key}`)?.value;
+    if(val) await sb.from('workload_settings').upsert({key,value:val});
+  }
+  await loadBase();
+  showToast('Thresholds saved','success');
+}
+
+async function saveWeightage(){
+  const weightKeys=TASK_TYPES.map(t=>({type:t,key:'weight_'+t.toLowerCase().replace(/[^a-z0-9]/g,'_')}));
+  for(const {key} of weightKeys){
+    const val=document.getElementById(`ws_${key}`)?.value;
+    if(val) await sb.from('workload_settings').upsert({key,value:val});
+  }
+  await loadBase();
+  showToast('Weightage saved','success');
+}
+
+async function saveStateHolidays(){
+  const raw=document.getElementById('ws_state_holidays')?.value||'';
+  const cleaned=raw.split('\n').map(s=>s.trim()).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s)).join(',');
+  await sb.from('workload_settings').upsert({key:'state_holidays',value:cleaned});
+  // Invalidate holiday cache
+  Object.keys(_holidayCache).forEach(k=>delete _holidayCache[k]);
+  await loadBase();
+  showToast('State holidays saved','success');
 }
 
 // ══════════════════════════════════
