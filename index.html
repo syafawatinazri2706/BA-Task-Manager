@@ -1417,16 +1417,16 @@ function renderImport(){
 const IMP_GUIDES = {
   projects:{
     required:['Project Name','Status'],
-    optional:['Assigned BA Email','Secondary BA Email','Supervising BA Email','Project Manager','Business Owner','Jira URL','Description'],
+    optional:['Assigned BA Name','Secondary BA Name','Supervising BA Name','Project Manager','Business Owner','Jira URL','Description'],
     statuses:['Active CR','In Progress','On Hold','Maintenance','Cancelled','Completed'],
-    notes:['BA email must match an existing user account','Status must be one of the allowed values']
+    notes:['BA Name must match an existing user account (case-insensitive)','Status must be one of the allowed values']
   },
   tasks:{
-    required:['BA Email','Project Name','Task Type','Description','Status'],
+    required:['BA Name','Project Name','Task Type','Description','Status'],
     optional:['ETA (YYYY-MM-DD)','Review Result','Remarks'],
     statuses:TASK_STATUSES,
     taskTypes:TASK_TYPES,
-    notes:['BA Email must match an existing user','ETA format must be YYYY-MM-DD','Task Type must match exactly']
+    notes:['BA Name must match an existing user (case-insensitive)','ETA format must be YYYY-MM-DD','Task Type must match exactly']
   }
 };
 
@@ -1474,7 +1474,7 @@ function previewImport(data){
   });
   importRows=validated;
   const ok=validated.filter(r=>r._ok).length,bad=validated.filter(r=>!r._ok).length;
-  const cols=importType==='projects'?['Project Name','Status','Assigned BA Email','Project Manager','Business Owner']:['BA Email','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)'];
+  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)'];
   document.getElementById('impPreview').innerHTML=`
     <div style="margin-bottom:.5rem;font-size:12px">
       <span style="color:var(--green)">${ok} valid rows</span> · <span style="color:var(--red)">${bad} errors</span> · ${validated.length} total
@@ -1499,15 +1499,15 @@ async function confirmImport(){
   let imported=0;
   if(importType==='projects'){
     for(const row of ok){
-      const aBA=AU.find(u=>u.email.toLowerCase()===(row['Assigned BA Email']||'').toLowerCase());
-      const s2=AU.find(u=>u.email.toLowerCase()===(row['Secondary BA Email']||'').toLowerCase());
-      const sup=AU.find(u=>u.email.toLowerCase()===(row['Supervising BA Email']||'').toLowerCase());
+      const aBA=AU.find(u=>u.name.toLowerCase()===(row['Assigned BA Name']||'').toLowerCase());
+      const s2=AU.find(u=>u.name.toLowerCase()===(row['Secondary BA Name']||'').toLowerCase());
+      const sup=AU.find(u=>u.name.toLowerCase()===(row['Supervising BA Name']||'').toLowerCase());
       const {error}=await sb.from('projects').insert({name:row['Project Name'],status:row['Status']||'In Progress',assigned_ba_id:aBA?.id||null,secondary_ba_id:s2?.id||null,supervising_ba_id:sup?.id||null,project_manager:row['Project Manager']||null,business_owner:row['Business Owner']||null,jira_url:row['Jira URL']||null,description:row['Description']||null});
       if(!error)imported++;
     }
   }else{
     for(const row of ok){
-      const ba=AU.find(u=>u.email.toLowerCase()===(row['BA Email']||'').toLowerCase());
+      const ba=AU.find(u=>u.name.toLowerCase()===(row['BA Name']||'').toLowerCase());
       if(!ba)continue;
       const proj=AP.find(p=>p.name.toLowerCase()===row['Project Name'].toLowerCase());
       const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta:row['ETA (YYYY-MM-DD)']||null,status:row['Status']||'To Do',review_result:row['Review Result']||null,remarks:row['Remarks']||null}).select().single();
@@ -1522,11 +1522,11 @@ async function confirmImport(){
 
 function dlTemplate(){
   const headers=importType==='projects'
-    ?['Project Name','Status','Assigned BA Email','Secondary BA Email','Supervising BA Email','Project Manager','Business Owner','Jira URL','Description']
-    :['BA Email','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)','Review Result','Remarks'];
+    ?['Project Name','Status','Assigned BA Name','Secondary BA Name','Supervising BA Name','Project Manager','Business Owner','Jira URL','Description']
+    :['BA Name','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)','Review Result','Remarks'];
   const sample=importType==='projects'
-    ?[['JMYR Admin Portal','In Progress','syafawati@myeg.com.my','','shahidah@myeg.com.my','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
-    :[['syafawati@myeg.com.my','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','2026-05-10','','Notes here']];
+    ?[['JMYR Admin Portal','In Progress','Syafawati','','Shahidah','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
+    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','2026-05-10','','Notes here']];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([headers,...sample]);
   ws['!cols']=headers.map(()=>({wch:22}));
