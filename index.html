@@ -1468,10 +1468,10 @@ const IMP_GUIDES = {
   },
   tasks:{
     required:['BA Name','Project Name','Task Type','Description','Status'],
-    optional:['ETA (YYYY-MM-DD)','Review Result','Remarks'],
+    optional:['ETA (DD/MM/YYYY)','Review Result','Remarks'],
     statuses:TASK_STATUSES,
     taskTypes:TASK_TYPES,
-    notes:['BA Name must match an existing user (case-insensitive)','ETA format must be YYYY-MM-DD','Task Type must match exactly']
+    notes:['BA Name must match an existing user (case-insensitive)','ETA format must be DD/MM/YYYY','Task Type must match exactly']
   }
 };
 
@@ -1519,7 +1519,7 @@ function previewImport(data){
   });
   importRows=validated;
   const ok=validated.filter(r=>r._ok).length,bad=validated.filter(r=>!r._ok).length;
-  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)'];
+  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)'];
   document.getElementById('impPreview').innerHTML=`
     <div style="margin-bottom:.5rem;font-size:12px">
       <span style="color:var(--green)">${ok} valid rows</span> · <span style="color:var(--red)">${bad} errors</span> · ${validated.length} total
@@ -1555,7 +1555,25 @@ async function confirmImport(){
       const ba=AU.find(u=>u.name.toLowerCase()===(row['BA Name']||'').toLowerCase());
       if(!ba)continue;
       const proj=AP.find(p=>p.name.toLowerCase()===row['Project Name'].toLowerCase());
-      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta:row['ETA (YYYY-MM-DD)']||null,status:row['Status']||'To Do',review_result:row['Review Result']||null,remarks:row['Remarks']||null}).select().single();
+      const rawEta=row['ETA (DD/MM/YYYY)'];
+      let eta=null;
+      if(rawEta){
+        // Handle Excel date serial number (e.g. 46133)
+        if(typeof rawEta==='number'||(/^\d{5}$/.test(String(rawEta)))){
+          const d=new Date(Math.round((Number(rawEta)-25569)*86400*1000));
+          eta=d.toISOString().split('T')[0];
+        } else {
+          const s=String(rawEta).trim();
+          // Handle DD/MM/YYYY format → convert to YYYY-MM-DD for Supabase
+          const dmyMatch=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if(dmyMatch){
+            eta=`${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
+          } else {
+            eta=s||null;
+          }
+        }
+      }
+      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,status:row['Status']||'To Do',review_result:row['Review Result']||null,remarks:row['Remarks']||null}).select().single();
       if(!error){await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;}
     }
   }
@@ -1568,13 +1586,23 @@ async function confirmImport(){
 function dlTemplate(){
   const headers=importType==='projects'
     ?['Project Name','Status','Assigned BA Name','Secondary BA Name','Supervising BA Name','Project Manager','Business Owner','Jira URL','Description']
-    :['BA Name','Project Name','Task Type','Description','Status','ETA (YYYY-MM-DD)','Review Result','Remarks'];
+    :['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Review Result','Remarks'];
   const sample=importType==='projects'
     ?[['JMYR Admin Portal','In Progress','Syafawati','','Shahidah','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
-    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','2026-05-10','','Notes here']];
+    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','10/05/2026','','Notes here']];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([headers,...sample]);
   ws['!cols']=headers.map(()=>({wch:22}));
+  // Force ETA column (index 5) to text format to prevent Excel converting to date serial
+  if(importType==='tasks'){
+    const etaColIdx=5;
+    for(let r=1;r<=sample.length;r++){
+      const cellAddr=XLSX.utils.encode_cell({r,c:etaColIdx});
+      if(ws[cellAddr]){ws[cellAddr].t='s';ws[cellAddr].z='@';}
+    }
+  }
+  XLSX.utils.book_append_sheet(wb,ws,'Template');
+  XLSX.writeFile(wb,`import_template_${importType}.xlsx`);
   XLSX.utils.book_append_sheet(wb,ws,'Template');
   XLSX.writeFile(wb,`import_template_${importType}.xlsx`);
 }
