@@ -324,7 +324,12 @@ tr:hover td{background:rgba(255,255,255,.012)}
         <option value="Very High">🔴 Very High</option><option value="High">🟠 High</option><option value="Medium" selected>🟡 Medium</option><option value="Low">🟢 Low</option>
       </select></div>
       <div class="ff"><label class="flb">Description <span style="color:var(--red)">*</span></label><input type="text" class="finp" id="tDesc" placeholder="Brief description of this task"></div>
-      <div class="ff"><label class="flb">ETA <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="tEta"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="ff"><label class="flb">Start Date <span class="opt">(optional)</span></label><input type="date" class="finp" id="tStartDate"><div class="fhint">When the BA plans to begin</div></div>
+        <div class="ff"><label class="flb" id="etaLabel">ETA</label><input type="date" class="finp" id="tEta"><div class="fhint" id="etaHint">Required when status is In Progress, Review, or Pending</div></div>
+      </div>
+      <div class="ff" id="etaReasonFF" style="display:none"><label class="flb">Reason for changing ETA <span style="color:var(--red)">*</span></label><input type="text" class="finp" id="tEtaReason" placeholder="e.g. Scope expanded, stakeholder delayed feedback..."><div class="fhint" style="color:var(--amber)">⚠ ETA change on In Progress task will be logged in the audit trail</div></div>
+      <div class="ff" id="onHoldReasonFF" style="display:none"><label class="flb">On Hold reason <span style="color:var(--red)">*</span></label><input type="text" class="finp" id="tOnHoldReason" placeholder="e.g. Deprioritised — waiting for Phase 2 sign-off..."><div class="fhint">State why this task is being put on hold</div></div>
       <div class="ff" id="proofUrlFF"><label class="flb" id="proofUrlLabel">Proof / Document URL <span style="color:var(--red)" id="proofUrlReq">*</span></label>
         <input type="url" class="finp" id="tProofUrl" placeholder="https://drive.google.com/...">
         <div class="fhint" id="proofUrlHint">GDrive link to signed document required for User Story Doc / CR Addendum Doc</div>
@@ -470,13 +475,15 @@ let AU = []; // all users
 let AP = []; // all projects
 let AR = []; // all roles
 let WS = {}; // workload settings
+let BA_LEAVES = []; // [{id, ba_id, start_date, end_date, reason}]
 let CP = ''; // current page
 let importType = 'projects';
 let importRows = [];
 let chatHistory = [];
 
 const TASK_TYPES = ['Requirement Gathering','Gap Analysis','Market Research','Mockup/Wireframe','User Story Doc','CR Addendum Doc','Development Support','App Testing','User Guide Doc','UAT Script','UAT Session','Training','Google Analytics','Production Verification','Production Support','Meeting/Discussion','Process Flow','Demo','Review UI','Review Doc','Others'];
-const DOC_TYPES = ['User Story Doc','CR Addendum Doc'];
+const DOC_TYPES = ['User Story Doc','CR Addendum Doc','User Guide Doc'];
+const MEETING_TYPE = 'Meeting/Discussion';
 const TASK_STATUSES = ['To Do','In Progress','Pending','On Hold','Review','Completed','Cancelled'];
 const PROJ_STATUSES = ['Active CR','In Progress','On Hold','Maintenance','Cancelled','Completed'];
 const ALL_PERMS = [
@@ -527,7 +534,7 @@ function userPerms() {
     const legacyMap = {
       manager: ALL_PERMS.map(p=>p.key), // all perms
       assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','create_project','edit_project','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload'],
-      ba: ['view_kpi_own','create_task_own','edit_task_own','view_team_board'],
+      ba: ['view_dashboard','view_kpi_own','create_task_own','edit_task_own','view_team_board'],
     };
     return legacyMap[CU.role] || ['view_kpi_own','create_task_own','edit_task_own','view_team_board'];
   }
@@ -550,15 +557,17 @@ async function init() {
 }
 
 async function loadBase() {
-  const [u, p, r, ws] = await Promise.all([
+  const [u, p, r, ws, lv] = await Promise.all([
     sb.from('users').select('*').order('name'),
     sb.from('projects').select('*').order('name'),
     sb.from('roles').select('*').order('name'),
     sb.from('workload_settings').select('*'),
+    sb.from('ba_leaves').select('*').order('start_date'),
   ]);
   AU = u.data || [];
   AP = p.data || [];
   AR = r.data || [];
+  BA_LEAVES = lv.data || [];
   WS = {};
   (ws.data||[]).forEach(s => WS[s.key] = s.value);
 }
@@ -707,6 +716,39 @@ function OD(eta,status) {
   return new Date(eta) < new Date(new Date().toDateString());
 }
 function DD(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+
+// Working days between two dates — excludes weekends, public holidays, and BA leave days
+function workingDays(dateA, dateB, baId){
+  if(!dateA||!dateB) return 0;
+  const start = new Date(dateA); start.setHours(0,0,0,0);
+  const end   = new Date(dateB); end.setHours(0,0,0,0);
+  if(end <= start) return 0;
+  // Build holiday set from WS.state_holidays
+  const holidaySet = new Set(
+    (WS.state_holidays||'').split(',').map(d=>d.trim()).filter(Boolean)
+  );
+  // Build leave set for this BA
+  const leaveSet = new Set();
+  if(baId){
+    BA_LEAVES.filter(l=>l.ba_id===baId).forEach(l=>{
+      const ls=new Date(l.start_date); ls.setHours(0,0,0,0);
+      const le=new Date(l.end_date);   le.setHours(0,0,0,0);
+      for(let d=new Date(ls);d<=le;d.setDate(d.getDate()+1)){
+        leaveSet.add(d.toISOString().split('T')[0]);
+      }
+    });
+  }
+  let count=0;
+  for(let d=new Date(start);d<end;d.setDate(d.getDate()+1)){
+    const dow=d.getDay();
+    const ds=d.toISOString().split('T')[0];
+    if(dow===0||dow===6) continue;       // weekend
+    if(holidaySet.has(ds)) continue;     // public holiday
+    if(leaveSet.has(ds)) continue;       // BA on leave
+    count++;
+  }
+  return count;
+}
 function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Review':'s-review','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
 function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
 function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
@@ -807,7 +849,11 @@ function buildTT(tasks,filter,baId,canEdit) {
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
-      <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">${t.eta||'—'}</td>
+      <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">
+        ${t.start_date?('<div style="font-size:9px;color:var(--text3)">▶ '+t.start_date+'</div>'):''}
+        ${t.eta||'—'}
+        ${t.eta_edit_count>0?('<span style="background:var(--abg);color:var(--amber);font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:6px;margin-left:3px" title="ETA changed '+t.eta_edit_count+'x">✎'+t.eta_edit_count+'</span>'):''}
+      </td>
       ${statusCell}
       <td>${proofLink}</td>
       <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
@@ -862,43 +908,115 @@ async function setRR(tid,result){
 function openAddTask(baId, projId='') {
   document.getElementById('tId').value=''; document.getElementById('tBaId').value=baId; document.getElementById('tProjId').value=projId;
   document.getElementById('tType').value='User Story Doc'; document.getElementById('tDesc').value='';
-  document.getElementById('tEta').value=''; document.getElementById('tStatus').value='To Do';
-  document.getElementById('tPriority').value='Medium';
+  document.getElementById('tEta').value=''; document.getElementById('tStartDate').value='';
+  document.getElementById('tStatus').value='To Do'; document.getElementById('tPriority').value='Medium';
   document.getElementById('tRemarks').value=''; document.getElementById('tProofUrl').value='';
-  populateAssignee(baId); populateProjDrop(baId,projId); onTaskTypeChange(); OM('taskModal');
+  document.getElementById('tEtaReason').value=''; document.getElementById('tOnHoldReason').value='';
+  window._editingTask=null;
+  populateAssignee(baId); populateProjDrop(baId,projId); onTaskTypeChange(); onStatusChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Add task';
 }
 
 async function openEditTask(tid){
   const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
   if(!t)return;
+  window._editingTask=t;
   document.getElementById('tId').value=t.id; document.getElementById('tBaId').value=t.ba_id; document.getElementById('tProjId').value=t.project_id||'';
   document.getElementById('tType').value=t.task_type; document.getElementById('tDesc').value=t.description;
-  document.getElementById('tEta').value=t.eta||''; document.getElementById('tStatus').value=t.status;
-  document.getElementById('tPriority').value=t.priority||'Medium';
+  document.getElementById('tEta').value=t.eta||''; document.getElementById('tStartDate').value=t.start_date||'';
+  document.getElementById('tStatus').value=t.status; document.getElementById('tPriority').value=t.priority||'Medium';
   document.getElementById('tRemarks').value=t.remarks||''; document.getElementById('tProofUrl').value=t.proof_url||'';
-  populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); onTaskTypeChange(); OM('taskModal');
+  document.getElementById('tEtaReason').value=''; document.getElementById('tOnHoldReason').value=t.on_hold_reason||'';
+  populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); onTaskTypeChange(); onStatusChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Edit task';
 }
 
 function onTaskTypeChange(){
   const type=document.getElementById('tType').value;
   const isDoc=DOC_TYPES.includes(type);
+  const isMeeting=(type===MEETING_TYPE);
   const reqStar=document.getElementById('proofUrlReq');
   const hint=document.getElementById('proofUrlHint');
-  if(isDoc){
+  const proofFF=document.getElementById('proofUrlFF');
+  const etaRow=document.getElementById('tEta')?.closest('.ff');
+
+  // Proof URL field
+  if(isMeeting){
+    proofFF.style.display='none';
+  } else if(isDoc){
+    proofFF.style.display='';
     reqStar.style.display='inline';
     hint.style.color='var(--amber)';
-    hint.textContent='Required: GDrive link to signed document';
+    hint.textContent='Required: GDrive or Confluence link to signed/completed document';
   } else {
+    proofFF.style.display='';
     reqStar.style.display='none';
     hint.style.color='var(--text3)';
     hint.textContent='Optional: link to related document or Jira ticket';
   }
+
+  // ETA field — hidden for Meeting (Start Date is enough)
+  const etaWrap=document.getElementById('tEta')?.parentElement;
+  if(etaWrap) etaWrap.style.display=isMeeting?'none':'';
+
+  // Status options — Meeting can only be To Do or Completed
+  const statusSel=document.getElementById('tStatus');
+  const currentStatus=statusSel.value;
+  if(isMeeting){
+    statusSel.innerHTML=`<option value="To Do">To Do</option><option value="Completed">Completed</option>`;
+    if(!['To Do','Completed'].includes(currentStatus)) statusSel.value='To Do';
+  } else {
+    if(statusSel.options.length<5){
+      statusSel.innerHTML=TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
+      statusSel.value=currentStatus||'To Do';
+    }
+  }
+  onStatusChange();
 }
 
 function onStatusChange(){
-  // Could add workflow hints here if needed
+  const status=document.getElementById('tStatus').value;
+  const etaInp=document.getElementById('tEta');
+  const etaLabel=document.getElementById('etaLabel');
+  const etaHint=document.getElementById('etaHint');
+  const etaReasonFF=document.getElementById('etaReasonFF');
+  const onHoldFF=document.getElementById('onHoldReasonFF');
+  const isMeeting=document.getElementById('tType')?.value===MEETING_TYPE;
+  // ETA field state — skip entirely for Meeting
+  if(isMeeting){ return; }
+  const isPaused=['Pending','Review','On Hold'].includes(status);
+  const isLocked=['Completed','Cancelled'].includes(status);
+  // ETA field state
+  if(isLocked){
+    etaInp.disabled=true; etaInp.style.opacity='0.5';
+    etaLabel.innerHTML='ETA <span style="color:var(--text3);font-weight:400;font-size:10px">(locked)</span>';
+    etaHint.textContent='Cannot change ETA on completed or cancelled tasks';
+    etaHint.style.color='var(--text3)';
+  } else if(isPaused){
+    etaInp.disabled=true; etaInp.style.opacity='0.6';
+    etaLabel.innerHTML='ETA <span style="color:var(--text3);font-weight:400;font-size:10px">(paused)</span>';
+    etaHint.textContent='ETA is paused while task is '+status+'. Will resume when moved back to In Progress.';
+    etaHint.style.color='var(--amber)';
+  } else if(isInProgress){
+    etaInp.disabled=false; etaInp.style.opacity='1';
+    etaLabel.innerHTML='ETA <span style="color:var(--red)">*</span>';
+    etaHint.textContent='Required — completion target date';
+    etaHint.style.color='var(--text3)';
+  } else {
+    // To Do
+    etaInp.disabled=false; etaInp.style.opacity='1';
+    etaLabel.innerHTML='ETA <span class="opt">(optional)</span>';
+    etaHint.textContent='Leave blank if not yet scheduled';
+    etaHint.style.color='var(--text3)';
+  }
+  // Show ETA reason field if: editing an existing In Progress task and ETA has changed
+  // We check on save — but show the field proactively when editing In Progress
+  const showEtaReason = old && oldStatus==='In Progress' && status==='In Progress';
+  etaReasonFF.style.display = showEtaReason ? 'block' : 'none';
+  if(!showEtaReason) document.getElementById('tEtaReason').value='';
+  // On Hold reason field
+  onHoldFF.style.display = status==='On Hold' ? 'block' : 'none';
+  if(status!=='On Hold') document.getElementById('tOnHoldReason').value='';
 }
 
 function chkReview(){ onTaskTypeChange(); } // backward compat
@@ -927,17 +1045,42 @@ async function saveTask(){
   const type=document.getElementById('tType').value;
   const desc=document.getElementById('tDesc').value.trim();
   const eta=document.getElementById('tEta').value||null;
+  const startDate=document.getElementById('tStartDate').value||null;
   const status=document.getElementById('tStatus').value;
   const priority=document.getElementById('tPriority').value||'Medium';
   const remarks=document.getElementById('tRemarks').value.trim();
   const proofUrl=document.getElementById('tProofUrl').value.trim()||null;
+  const etaReason=document.getElementById('tEtaReason').value.trim()||null;
+  const onHoldReason=document.getElementById('tOnHoldReason').value.trim()||null;
 
   // Mandatory field validation
   if(!baId){showToast('Assignee is required','error');return;}
   if(!projId){showToast('Project is required','error');return;}
   if(!desc){showToast('Description is required','error');return;}
-  if(!eta){showToast('ETA is required','error');return;}
   if(!status){showToast('Status is required','error');return;}
+
+  // ETA mandatory for In Progress — except Meeting/Discussion
+  if(status==='In Progress'&&!eta&&type!==MEETING_TYPE){
+    showToast('ETA is required when status is In Progress','error');
+    document.getElementById('tEta').style.borderColor='var(--red)';
+    document.getElementById('tEta').focus();
+    return;
+  }
+
+  // On Hold reason mandatory
+  if(status==='On Hold'&&!onHoldReason){
+    showToast('Please state the reason for putting this task on hold','error');
+    document.getElementById('tOnHoldReason').focus();
+    return;
+  }
+
+  // ETA reason mandatory when editing ETA on an In Progress task
+  const old=window._editingTask;
+  if(id && old && old.status==='In Progress' && status==='In Progress' && old.eta!==eta && eta && !etaReason){
+    showToast('Please provide a reason for changing the ETA','error');
+    document.getElementById('tEtaReason').focus();
+    return;
+  }
 
   // Proof URL mandatory for US/CR when Completing
   if(status==='Completed'&&DOC_TYPES.includes(type)&&!proofUrl){
@@ -951,26 +1094,54 @@ async function saveTask(){
   btn.disabled=true;btn.textContent='Saving...';
   try{
     if(id){
-      const {data:old}=await sb.from('tasks').select('*').eq('id',id).single();
-      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,priority,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
+      const {data:oldTask}=await sb.from('tasks').select('*').eq('id',id).single();
+      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
+      // On Hold reason
+      if(status==='On Hold'&&onHoldReason) updates.on_hold_reason=onHoldReason;
+      if(status!=='On Hold') updates.on_hold_reason=null;
+      // ETA pause tracking — record when task entered/left paused state
+      const pausedStatuses=['Pending','Review','On Hold'];
+      if(!pausedStatuses.includes(oldTask.status)&&pausedStatuses.includes(status)){
+        updates.paused_at=new Date().toISOString();
+      }
+      if(pausedStatuses.includes(oldTask.status)&&!pausedStatuses.includes(status)&&oldTask.paused_at){
+        const pausedDays=DD(oldTask.paused_at,new Date().toISOString());
+        updates.total_paused_days=(oldTask.total_paused_days||0)+pausedDays;
+        updates.paused_at=null;
+        // Auto-adjust ETA by paused days
+        if(eta&&pausedDays>0){
+          const adjustedEta=new Date(eta);
+          adjustedEta.setDate(adjustedEta.getDate()+pausedDays);
+          updates.eta=adjustedEta.toISOString().split('T')[0];
+          showToast(`ETA auto-adjusted +${pausedDays} day${pausedDays!==1?'s':''} to account for paused time`,'info');
+        }
+      }
       // Silent rework: Review → In Progress for US/CR docs
-      if(DOC_TYPES.includes(type)&&old.status==='Review'&&status==='In Progress'){
-        updates.rework_count=(old.rework_count||0)+1;
-        await logA(id,baId,'rework_count',String(old.rework_count||0),String(updates.rework_count),'rework',null);
+      if(DOC_TYPES.includes(type)&&oldTask.status==='Review'&&status==='In Progress'){
+        updates.rework_count=(oldTask.rework_count||0)+1;
+        await logA(id,baId,'rework_count',String(oldTask.rework_count||0),String(updates.rework_count),'rework',null);
       }
       await sb.from('tasks').update(updates).eq('id',id);
-      if(old.eta!==eta){let flag='edited',delta=null;if(old.eta&&eta){delta=DD(old.eta,eta);flag=delta>0?'delayed':delta<0?'expedited':'edited';}await logA(id,baId,'eta',old.eta||'',eta||'',flag,delta);}
-      if(old.status!==status)await logA(id,baId,'status',old.status,status,'status_change',null);
-      if(old.priority!==priority)await logA(id,baId,'priority',old.priority||'Medium',priority,'edited',null);
-      if(old.proof_url!==proofUrl&&proofUrl)await logA(id,baId,'proof_url',old.proof_url||'',proofUrl,'edited',null);
+      // ETA change audit — include reason and increment eta_edit_count
+      if(oldTask.eta!==eta){
+        let flag='edited',delta=null;
+        if(oldTask.eta&&eta){delta=DD(oldTask.eta,eta);flag=delta>0?'delayed':delta<0?'expedited':'edited';}
+        const editCount=(oldTask.eta_edit_count||0)+1;
+        await sb.from('tasks').update({eta_edit_count:editCount}).eq('id',id);
+        await logA(id,baId,'eta',oldTask.eta||'',updates.eta||eta||'',flag,delta,etaReason);
+      }
+      if(oldTask.status!==status)await logA(id,baId,'status',oldTask.status,status,'status_change',null);
+      if(oldTask.priority!==priority)await logA(id,baId,'priority',oldTask.priority||'Medium',priority,'edited',null);
+      if(oldTask.proof_url!==proofUrl&&proofUrl)await logA(id,baId,'proof_url',oldTask.proof_url||'',proofUrl,'edited',null);
+      if(status==='On Hold'&&onHoldReason)await logA(id,baId,'on_hold_reason','',onHoldReason,'on_hold',null);
       showToast('Task updated','success');
     }else{
-      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,priority,remarks,proof_url:proofUrl,rework_count:0}).select().single();
+      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,remarks,proof_url:proofUrl,rework_count:0,eta_edit_count:0,total_paused_days:0,on_hold_reason:onHoldReason||null}).select().single();
       await logA(nt.id,baId,'created','',status,'created',null);
       showToast('Task added','success');
     }
     CM('taskModal');await loadBase();refreshPage();
-  }catch(e){showToast('Error saving','error');console.error(e);}
+  }catch(e){showToast('Error saving: '+e.message,'error');console.error(e);}
   btn.disabled=false;btn.textContent='Save task';
 }
 
@@ -1679,7 +1850,7 @@ async function renderMyKPI(){
 
 function calcKPI(ba,tasks){
   const bt=tasks.filter(t=>t.ba_id===ba.id);
-  const done=bt.filter(t=>t.status==='Completed');
+  const done=bt.filter(t=>t.status==='Completed'&&t.task_type!==MEETING_TYPE);
   // Timeliness — null/empty if no completed tasks
   const onTime=done.filter(t=>!t.eta||new Date(t.eta)>=new Date(t.updated_at)).length;
   const hasCompleted=done.length>0;
@@ -1690,12 +1861,12 @@ function calcKPI(ba,tasks){
   const reworkCount=docs.filter(t=>t.review_result==='Rework'||t.rework_count>0).length;
   const hasDocs=docs.length>0;
   const quality=hasDocs?Math.round(passCount/docs.length*100):null;
-  // Avg completion time for US/CR docs
+  // Avg completion time for US/CR/UserGuide docs — working days
   const doneDocs=done.filter(t=>DOC_TYPES.includes(t.task_type)&&t.created_at&&t.updated_at);
-  const avgDocDays=doneDocs.length?Math.round(doneDocs.reduce((s,t)=>s+DD(t.created_at,t.updated_at),0)/doneDocs.length):null;
-  // Avg completion time for all tasks
+  const avgDocDays=doneDocs.length?Math.round(doneDocs.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,ba.id),0)/doneDocs.length):null;
+  // Avg completion time for all tasks — working days
   const doneAll=done.filter(t=>t.created_at&&t.updated_at);
-  const avgAllDays=doneAll.length?Math.round(doneAll.reduce((s,t)=>s+DD(t.created_at,t.updated_at),0)/doneAll.length):null;
+  const avgAllDays=doneAll.length?Math.round(doneAll.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,ba.id),0)/doneAll.length):null;
   // Rework rate
   const docTotal=bt.filter(t=>DOC_TYPES.includes(t.task_type)).length;
   const reworkRate=docTotal?Math.round(reworkCount/docTotal*100):null;
@@ -1993,6 +2164,7 @@ async function delRole(id,name){
 async function renderAdmin(){
   const el=document.getElementById('pageAdmin');
   await loadBase();
+  const today=new Date().toISOString().split('T')[0];
   el.innerHTML=`
     <div class="phr">
       <div><div class="pt">Manage team</div><div class="ps">${AU.length} members</div></div>
@@ -2001,22 +2173,109 @@ async function renderAdmin(){
     <div class="card">
       ${AU.map(u=>{
         const r=AR.find(x=>x.id===u.role_id);
-        return`<div class="user-row">
-          <div class="uav">${INI(u.name)}</div>
-          <div style="flex:1">
-            <div style="font-size:12.5px;font-weight:500">${u.name}</div>
+        const leaves=BA_LEAVES.filter(l=>l.ba_id===u.id).sort((a,b)=>a.start_date.localeCompare(b.start_date));
+        const onLeave=leaves.some(l=>l.start_date<=today&&l.end_date>=today);
+        return`<div class="user-row" style="flex-wrap:wrap;gap:8px;align-items:flex-start">
+          <div class="uav" style="margin-top:2px">${INI(u.name)}</div>
+          <div style="flex:1;min-width:160px">
+            <div style="font-size:12.5px;font-weight:500">${u.name}${onLeave?' <span style="background:var(--abg);color:var(--amber);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">ON LEAVE</span>':''}</div>
             <div style="font-size:10.5px;color:var(--text3)">${u.email} · ${r?.name||u.role||'BA'}</div>
+            ${leaves.length?`<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${leaves.map(l=>`<span style="background:var(--surface2);border:1px solid var(--border);font-size:9.5px;padding:2px 7px;border-radius:6px;color:var(--text2);display:inline-flex;align-items:center;gap:5px">📅 ${l.start_date} → ${l.end_date}${l.reason?' · '+l.reason:''}<span style="cursor:pointer;color:var(--red);font-weight:900;font-size:11px;line-height:1" onclick="deleteLeave('${l.id}','${u.name}')">×</span></span>`).join('')}</div>`:''}
           </div>
-          <span style="font-size:10.5px;background:var(--ag);color:var(--accent);padding:2px 7px;border-radius:10px">${r?.name||u.role||'BA'}</span>
-          <button class="btn btn-g btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
-          ${u.id!==CU.id?`<button class="btn btn-d btn-sm" onclick="delUser('${u.id}','${u.name}')">Remove</button>`:''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px">
+            <button class="btn btn-sm" style="background:var(--surface2);color:var(--accent);border:1px solid var(--accent)" onclick="openAddLeave('${u.id}','${u.name}')">📅 Leave</button>
+            <span class="badge" style="background:var(--ag);color:var(--accent)">${r?.name||u.role||'BA'}</span>
+            <button class="btn btn-g btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
+            ${u.id!==CU.id?`<button class="btn btn-d btn-sm" onclick="delUser('${u.id}','${u.name}')">Remove</button>`:''}
+          </div>
         </div>`;
       }).join('')}
-    </div>`;
+    </div>
+    <div class="modal" id="leaveModal">
+      <div class="mc" style="max-width:440px">
+        <div class="mh"><div class="mt" id="leaveModalTitle">Add leave</div><button class="mcl" onclick="CM('leaveModal')">×</button></div>
+        <div class="mb">
+          <input type="hidden" id="lBaId">
+          <div class="ff"><label class="flb">BA</label><input class="finp" id="lBaName" disabled></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="ff"><label class="flb">Start date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lStart" onchange="previewLeaveImpact()"></div>
+            <div class="ff"><label class="flb">End date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lEnd" onchange="previewLeaveImpact()"></div>
+          </div>
+          <div class="ff"><label class="flb">Reason <span class="opt">(optional)</span></label><input type="text" class="finp" id="lReason" placeholder="e.g. Annual leave, Medical leave..."></div>
+          <div id="lEtaAdjustInfo" style="display:none;background:var(--abg);border-radius:var(--rs);padding:.65rem;margin-top:.5rem">
+            <div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:4px">⚠ ETA auto-adjustment preview</div>
+            <div style="font-size:11px;color:var(--text2)" id="lEtaAdjustText"></div>
+          </div>
+        </div>
+        <div class="mf"><button class="btn btn-g" onclick="CM('leaveModal')">Cancel</button><button class="btn btn-a" onclick="saveLeave()">Save leave</button></div>
+      </div>
+    </div>`;}
+
+function openAddLeave(baId, baName){
+  document.getElementById('lBaId').value=baId;
+  document.getElementById('lBaName').value=baName;
+  document.getElementById('lStart').value='';
+  document.getElementById('lEnd').value='';
+  document.getElementById('lReason').value='';
+  document.getElementById('lEtaAdjustInfo').style.display='none';
+  OM('leaveModal');
+}
+
+async function previewLeaveImpact(){
+  const baId=document.getElementById('lBaId')?.value;
+  const start=document.getElementById('lStart').value;
+  const end=document.getElementById('lEnd').value;
+  const info=document.getElementById('lEtaAdjustInfo');
+  const txt=document.getElementById('lEtaAdjustText');
+  if(!baId||!start||!end||end<start){info.style.display='none';return;}
+  const leaveDays=DD(start,end)+1;
+  const {data:activeTasks}=await sb.from('tasks').select('id,description,eta,project_name')
+    .eq('ba_id',baId).in('status',['To Do','In Progress','Pending','Review']).not('eta','is',null);
+  const affected=(activeTasks||[]).filter(t=>t.eta>=start);
+  info.style.display='block';
+  if(affected.length){
+    txt.innerHTML=`${affected.length} active task${affected.length!==1?'s':''} will have ETA shifted forward by <strong>${leaveDays} day${leaveDays!==1?'s':''}</strong>:<br><span style="font-size:10px;color:var(--text3)">${affected.slice(0,4).map(t=>`${t.project_name}: ${t.description} (${t.eta})`).join('<br>')}${affected.length>4?`<br>...and ${affected.length-4} more`:''}</span>`;
+  } else {
+    txt.textContent='No active tasks affected — no ETA adjustments needed.';
+  }
+}
+
+async function saveLeave(){
+  const baId=document.getElementById('lBaId')?.value;
+  const start=document.getElementById('lStart').value;
+  const end=document.getElementById('lEnd').value;
+  const reason=document.getElementById('lReason').value.trim()||null;
+  if(!baId||!start||!end){showToast('Start and end date required','error');return;}
+  if(end<start){showToast('End date must be on or after start date','error');return;}
+  const leaveDays=DD(start,end)+1;
+  const {error}=await sb.from('ba_leaves').insert({ba_id:baId,start_date:start,end_date:end,reason,created_by:CU.id});
+  if(error){showToast('Error saving leave: '+error.message,'error');return;}
+  // Auto-adjust ETAs
+  const {data:activeTasks}=await sb.from('tasks').select('*')
+    .eq('ba_id',baId).in('status',['To Do','In Progress','Pending','Review']).not('eta','is',null);
+  const affected=(activeTasks||[]).filter(t=>t.eta>=start);
+  for(const t of affected){
+    const newEta=new Date(t.eta);
+    newEta.setDate(newEta.getDate()+leaveDays);
+    const newEtaStr=newEta.toISOString().split('T')[0];
+    await sb.from('tasks').update({eta:newEtaStr,eta_edit_count:(t.eta_edit_count||0)+1,updated_at:new Date().toISOString()}).eq('id',t.id);
+    await logA(t.id,baId,'eta',t.eta,newEtaStr,'leave_adjustment',leaveDays,`Leave ${start} to ${end}${reason?' — '+reason:''}`);
+  }
+  CM('leaveModal');
+  await loadBase();
+  showToast('Leave saved'+(affected.length?' · '+affected.length+' ETA'+(affected.length!==1?'s':'')+' adjusted':''),'success');
+  renderAdmin();
+}
+
+async function deleteLeave(leaveId, baName){
+  if(!confirm(`Remove this leave entry for ${baName}?\n\nNote: ETAs that were auto-adjusted when this leave was added will NOT be reversed automatically.`))return;
+  await sb.from('ba_leaves').delete().eq('id',leaveId);
+  await loadBase();
+  showToast('Leave entry removed','success');
+  renderAdmin();
 }
 
 function openAddUser(){
-  document.getElementById('uId').value='';
   document.getElementById('userModalTitle').textContent='Add member';
   ['uName','uEmail','uPin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pinHint').textContent='Required for new accounts';
@@ -2190,8 +2449,8 @@ async function showTaskHistory(tid) {
 // ══════════════════════════════════
 // AUDIT LOG HELPER
 // ══════════════════════════════════
-async function logA(taskId,baId,field,oldVal,newVal,flagType,daysDelta){
-  await sb.from('task_audit').insert({task_id:taskId,ba_id:baId,changed_by_id:CU.id,changed_by_name:CU.name,field_name:field,old_value:String(oldVal||''),new_value:String(newVal||''),flag_type:flagType,days_delta:daysDelta});
+async function logA(taskId,baId,field,oldVal,newVal,flagType,daysDelta,reason){
+  await sb.from('task_audit').insert({task_id:taskId,ba_id:baId,changed_by_id:CU.id,changed_by_name:CU.name,field_name:field,old_value:String(oldVal||''),new_value:String(newVal||''),flag_type:flagType,days_delta:daysDelta,reason:reason||null});
 }
 
 // ══════════════════════════════════
@@ -2356,6 +2615,11 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     </div>
     <div class="chart-card"><div class="chart-title">Task completion trend (weekly)</div><div class="chart-wrap" style="height:200px"><canvas id="ch6" role="img" aria-label="Weekly task completion trend">Completed tasks per week.</canvas></div></div>
     <div class="chart-card"><div class="chart-title">KPI score breakdown per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch7" role="img" aria-label="KPI scores per BA stacked">KPI pillar scores per team member.</canvas></div></div>
+    <div class="card" style="margin-top:1rem">
+      <div class="ct">Avg completion days by task type — per BA</div>
+      <div class="fhint" style="margin-bottom:.75rem">Working days from task creation to completion — excludes weekends, public holidays, and BA leave days. Excludes Meeting/Discussion. — = no completed tasks of that type yet.</div>
+      <div id="avgCompTable"></div>
+    </div>
   `;
 
   const opts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} };
@@ -2394,6 +2658,68 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     {label:'Quality (50)',data:kpiScores.map(s=>s.quality!=null?s.qScore:0),backgroundColor:'#7c6cfa',borderRadius:2},
     {label:'Timeliness (50)',data:kpiScores.map(s=>s.timeliness!=null?s.tScore:0),backgroundColor:'#3ecf8e',borderRadius:2},
   ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,max:100,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
+
+  // ── Avg completion days by task type per BA ───────────────────────────
+  const EXCL_TYPES=[MEETING_TYPE];
+  const usedTypes=[...new Set(allT
+    .filter(t=>t.status==='Completed'&&!EXCL_TYPES.includes(t.task_type)&&t.created_at&&t.updated_at)
+    .map(t=>t.task_type)
+  )].sort();
+
+  if(usedTypes.length && members.length){
+    // Build data: for each BA × task type, calc avg days
+    const avgData = members.map(u=>{
+      const byType={};
+      usedTypes.forEach(tt=>{
+        const done=allT.filter(t=>t.ba_id===u.id&&t.task_type===tt&&t.status==='Completed'&&t.created_at&&t.updated_at);
+        byType[tt]=done.length?Math.round(done.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,u.id),0)/done.length):null;
+      });
+      return{name:u.name,byType};
+    });
+
+    // Colour-code cell: green ≤3d, blue ≤7d, amber ≤14d, red >14d
+    const cellColor=d=>d==null?'var(--text3)':d<=3?'var(--green)':d<=7?'var(--blue)':d<=14?'var(--amber)':'var(--red)';
+    const cellBg=d=>d==null?'':d<=3?'rgba(62,207,142,0.08)':d<=7?'rgba(77,166,255,0.08)':d<=14?'rgba(246,166,35,0.08)':'rgba(245,101,101,0.08)';
+
+    const thStyle='padding:6px 10px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface2)';
+    const tdBase='padding:6px 10px;font-size:11px;font-family:var(--mono);border-bottom:1px solid var(--border);text-align:center';
+
+    const tableHtml=`<div class="tw" style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:600px">
+        <thead><tr>
+          <th style="${thStyle};text-align:left;min-width:120px">BA</th>
+          ${usedTypes.map(tt=>`<th style="${thStyle}">${tt}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${avgData.map(row=>`<tr>
+            <td style="padding:6px 10px;font-size:12px;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">${row.name}</td>
+            ${usedTypes.map(tt=>{
+              const d=row.byType[tt];
+              return`<td style="${tdBase};color:${cellColor(d)};background:${cellBg(d)}">${d!=null?d+'d':'—'}</td>`;
+            }).join('')}
+          </tr>`).join('')}
+          <tr style="background:var(--surface2)">
+            <td style="padding:6px 10px;font-size:11px;font-weight:700;border-top:2px solid var(--border)">Team avg</td>
+            ${usedTypes.map(tt=>{
+              const vals=avgData.map(r=>r.byType[tt]).filter(v=>v!=null);
+              const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;
+              return`<td style="${tdBase};font-weight:700;border-top:2px solid var(--border);color:${cellColor(avg)};background:${cellBg(avg)}">${avg!=null?avg+'d':'—'}</td>`;
+            }).join('')}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:.6rem;font-size:10.5px;color:var(--text3)">
+      <span style="color:var(--green)">● ≤ 3 days</span>
+      <span style="color:var(--blue)">● ≤ 7 days</span>
+      <span style="color:var(--amber)">● ≤ 14 days</span>
+      <span style="color:var(--red)">● &gt; 14 days</span>
+      <span>— = no completed tasks of this type</span>
+    </div>`;
+    document.getElementById('avgCompTable').innerHTML=tableHtml;
+  } else {
+    document.getElementById('avgCompTable').innerHTML=`<div style="font-size:12px;color:var(--text3);padding:.5rem 0">No completed tasks with data yet.</div>`;
+  }
 }
 
 // ══════════════════════════════════
