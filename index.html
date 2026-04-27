@@ -2456,9 +2456,67 @@ async function renderSettings(){
       </div>
       <div id="aiKeyFields"></div>
       <button class="btn btn-a btn-sm" style="margin-top:4px" onclick="saveAIConfig()">Save AI config</button>
-    </div>`;
-  // Render the correct key fields on load
+    </div>
+    <div class="card" style="border:1px solid var(--red);background:var(--rbg)">
+      <div class="ct" style="color:var(--red)">⚠ Danger zone</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.85rem">These actions are permanent and cannot be undone. All task data, history, and KPI scores will be lost.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none" onclick="confirmClearTasks('all')">🗑 Clear all tasks</button>
+        <button class="btn btn-sm" style="background:var(--surface2);color:var(--red);border:1px solid var(--red)" onclick="confirmClearTasks('completed')">Clear completed tasks only</button>
+      </div>
+    </div>\``;
   setTimeout(()=>onAIProviderChange(),10);
+}
+
+function confirmClearTasks(mode){
+  const label=mode==='all'?'ALL tasks':'completed tasks only';
+  const count=mode==='all'?window._tasks?.length:(window._tasks?.filter(t=>t.status==='Completed').length||0);
+  if(count===0){showToast(`No ${mode==='all'?'tasks':'completed tasks'} to clear`,'info');return;}
+  // Build confirmation modal
+  const existing=document.getElementById('clearConfirmModal');
+  if(existing)existing.remove();
+  const modal=document.createElement('div');
+  modal.id='clearConfirmModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML=`
+    <div style="background:var(--surface1);border:1px solid var(--red);border-radius:12px;padding:1.5rem;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.4)">
+      <div style="font-size:16px;font-weight:700;color:var(--red);margin-bottom:.5rem">⚠ Are you sure?</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1rem">You're about to permanently delete <strong style="color:var(--text1)">${count} ${label}</strong>. This cannot be undone.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:1.25rem">Type <strong>DELETE</strong> to confirm:</div>
+      <input type="text" id="clearConfirmInput" class="finp" placeholder="Type DELETE here" style="margin-bottom:1rem;font-family:var(--mono)">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="document.getElementById('clearConfirmModal').remove()">Cancel</button>
+        <button class="btn btn-sm" id="clearConfirmBtn" style="background:var(--red);color:#fff;border:none;opacity:.4;cursor:not-allowed" disabled onclick="executeClearTasks('${mode}')">Delete ${count} tasks</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('clearConfirmInput').addEventListener('input',function(){
+    const btn=document.getElementById('clearConfirmBtn');
+    if(this.value==='DELETE'){btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';}
+    else{btn.disabled=true;btn.style.opacity='.4';btn.style.cursor='not-allowed';}
+  });
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+
+async function executeClearTasks(mode){
+  const modal=document.getElementById('clearConfirmModal');
+  const btn=document.getElementById('clearConfirmBtn');
+  btn.textContent='Deleting...';btn.disabled=true;
+  try{
+    let q=sb.from('tasks').delete();
+    if(mode==='completed') q=q.eq('status','Completed');
+    else q=q.neq('id','00000000-0000-0000-0000-000000000000'); // delete all (truthy filter)
+    const {error}=await q;
+    if(error)throw error;
+    modal.remove();
+    await loadBase();
+    showToast(mode==='all'?'All tasks cleared':'Completed tasks cleared','success');
+    renderTasks();
+  }catch(e){
+    btn.textContent='Delete failed — try again';
+    btn.disabled=false;
+    showToast('Delete failed: '+e.message,'error');
+  }
 }
 
 async function savePriorityMultipliers(){
