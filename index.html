@@ -20,6 +20,7 @@
   --red:#f56565;--rbg:rgba(245,101,101,0.1);
   --blue:#4da6ff;--bbg:rgba(77,166,255,0.1);
   --gray:rgba(144,144,160,0.1);
+  --priority-vh:rgba(245,101,101,0.15);--priority-h:rgba(246,166,35,0.15);--priority-m:rgba(77,166,255,0.12);--priority-l:rgba(62,207,142,0.1);
   --r:10px;--rs:6px;--rl:14px;--rxl:18px;
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
   --sb:228px;--t:0.15s ease;
@@ -92,6 +93,10 @@ input,select,textarea{font-family:var(--font)}
 .b-cancelled{background:var(--rbg);color:var(--red)}
 .b-pass{background:var(--gbg);color:var(--green)}
 .b-rework{background:var(--rbg);color:var(--red)}
+.p-vh{background:var(--priority-vh);color:var(--red);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px;letter-spacing:.02em}
+.p-h{background:var(--priority-h);color:var(--amber);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px}
+.p-m{background:var(--priority-m);color:var(--blue);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px}
+.p-l{background:var(--priority-l);color:var(--green);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:8px}
 .b-review{background:rgba(167,139,250,0.15);color:#a78bfa}
 .s-review{background:rgba(167,139,250,0.15);color:#a78bfa;border-color:rgba(167,139,250,0.3)}
 .tw{overflow-x:auto}
@@ -315,6 +320,9 @@ tr:hover td{background:rgba(255,255,255,.012)}
           <option>To Do</option><option>In Progress</option><option>Pending</option><option>On Hold</option><option>Review</option><option>Completed</option><option>Cancelled</option>
         </select></div>
       </div>
+      <div class="ff"><label class="flb">Priority <span style="color:var(--red)">*</span></label><select class="fsel" id="tPriority">
+        <option value="Very High">🔴 Very High</option><option value="High">🟠 High</option><option value="Medium" selected>🟡 Medium</option><option value="Low">🟢 Low</option>
+      </select></div>
       <div class="ff"><label class="flb">Description <span style="color:var(--red)">*</span></label><input type="text" class="finp" id="tDesc" placeholder="Brief description of this task"></div>
       <div class="ff"><label class="flb">ETA <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="tEta"></div>
       <div class="ff" id="proofUrlFF"><label class="flb" id="proofUrlLabel">Proof / Document URL <span style="color:var(--red)" id="proofUrlReq">*</span></label>
@@ -392,8 +400,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
           <div class="fhint" id="pinHint">Required for new accounts</div></div>
         <div class="ff"><label class="flb">Role</label><select class="fsel" id="uRoleId"></select></div>
       </div>
-      <div class="ff"><label class="flb">Monthly US doc target</label><input type="number" class="finp" id="uTarget" value="4" min="1" max="30">
-        <div class="fhint">KPI volume target</div></div>
+
     </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('userModal')">Cancel</button><button class="btn btn-a" onclick="saveUser()">Save</button></div>
   </div>
@@ -448,6 +455,11 @@ tr:hover td{background:rgba(255,255,255,.012)}
 const SUPABASE_URL = 'https://zerezgqzwpkjjwmitvkq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplcmV6Z3F6d3Bramp3bWl0dmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzM2MDgsImV4cCI6MjA5MjQ0OTYwOH0.Vzv3TA2E7C7p5ZQd22GOUj8ak4r38XUkF0aUt9WUSTQ';
 let ANTHROPIC_KEY = localStorage.getItem('anthropic_api_key') || '';
+let AI_PROVIDER = localStorage.getItem('ai_provider') || 'claude'; // claude | gemini | openai | custom
+let GEMINI_KEY = localStorage.getItem('gemini_api_key') || '';
+let OPENAI_KEY = localStorage.getItem('openai_api_key') || '';
+let CUSTOM_AI_URL = localStorage.getItem('custom_ai_url') || '';
+let CUSTOM_AI_KEY = localStorage.getItem('custom_ai_key') || '';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ══════════════════════════════════
@@ -499,6 +511,10 @@ const W_WEIGHTS = {
   'App Testing':2,'Development Support':2,'CR Addendum Doc':2,'Gap Analysis':2,
 };
 const W_DEFAULT = 1;
+const PRIORITIES = ['Very High','High','Medium','Low'];
+const PRIORITY_MULTIPLIERS = {'Very High':1.5,'High':1.25,'Medium':1.0,'Low':0.75};
+function priorityBadge(p){ const m={'Very High':'p-vh','High':'p-h','Medium':'p-m','Low':'p-l'}; return `<span class="${m[p]||'p-m'}">${p||'Medium'}</span>`; }
+function getPriorityMultiplier(p){ return parseFloat(WS['priority_mult_'+p?.toLowerCase().replace(' ','_')]||PRIORITY_MULTIPLIERS[p]||1.0); }
 
 // ══════════════════════════════════
 // PERMISSION HELPERS
@@ -694,7 +710,7 @@ function DD(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
 function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Review':'s-review','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
 function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
 function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
-function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)).reduce((s,t)=>s+(getWeight(t.task_type)),0); }
+function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)).reduce((s,t)=>s+(getWeight(t.task_type)*getPriorityMultiplier(t.priority||'Medium')),0); }
 function getWeight(type){ return parseInt(WS['weight_'+type.toLowerCase().replace(/[^a-z]/g,'_')]||WS['weight_default']||W_WEIGHTS[type]||W_DEFAULT); }
 function wlStatus(score){
   const gm = parseInt(WS.green_max||14), am = parseInt(WS.amber_max||25);
@@ -789,16 +805,17 @@ function buildTT(tasks,filter,baId,canEdit) {
       ${ba}
       <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
+      <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
       <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">${t.eta||'—'}</td>
       ${statusCell}
       <td>${proofLink}</td>
       <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
     </tr>
-    <tr id="remarks-row-${t.id}" style="display:none"><td colspan="8" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
+    <tr id="remarks-row-${t.id}" style="display:none"><td colspan="9" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
   }).join('');
   const bah = baId==='all'?'<th>BA</th>':'';
-  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Description</th><th>ETA</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>ETA</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function buildSB(tid,cur,interactive){
@@ -846,6 +863,7 @@ function openAddTask(baId, projId='') {
   document.getElementById('tId').value=''; document.getElementById('tBaId').value=baId; document.getElementById('tProjId').value=projId;
   document.getElementById('tType').value='User Story Doc'; document.getElementById('tDesc').value='';
   document.getElementById('tEta').value=''; document.getElementById('tStatus').value='To Do';
+  document.getElementById('tPriority').value='Medium';
   document.getElementById('tRemarks').value=''; document.getElementById('tProofUrl').value='';
   populateAssignee(baId); populateProjDrop(baId,projId); onTaskTypeChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Add task';
@@ -857,6 +875,7 @@ async function openEditTask(tid){
   document.getElementById('tId').value=t.id; document.getElementById('tBaId').value=t.ba_id; document.getElementById('tProjId').value=t.project_id||'';
   document.getElementById('tType').value=t.task_type; document.getElementById('tDesc').value=t.description;
   document.getElementById('tEta').value=t.eta||''; document.getElementById('tStatus').value=t.status;
+  document.getElementById('tPriority').value=t.priority||'Medium';
   document.getElementById('tRemarks').value=t.remarks||''; document.getElementById('tProofUrl').value=t.proof_url||'';
   populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); onTaskTypeChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Edit task';
@@ -909,6 +928,7 @@ async function saveTask(){
   const desc=document.getElementById('tDesc').value.trim();
   const eta=document.getElementById('tEta').value||null;
   const status=document.getElementById('tStatus').value;
+  const priority=document.getElementById('tPriority').value||'Medium';
   const remarks=document.getElementById('tRemarks').value.trim();
   const proofUrl=document.getElementById('tProofUrl').value.trim()||null;
 
@@ -932,7 +952,7 @@ async function saveTask(){
   try{
     if(id){
       const {data:old}=await sb.from('tasks').select('*').eq('id',id).single();
-      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
+      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,priority,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
       // Silent rework: Review → In Progress for US/CR docs
       if(DOC_TYPES.includes(type)&&old.status==='Review'&&status==='In Progress'){
         updates.rework_count=(old.rework_count||0)+1;
@@ -941,10 +961,11 @@ async function saveTask(){
       await sb.from('tasks').update(updates).eq('id',id);
       if(old.eta!==eta){let flag='edited',delta=null;if(old.eta&&eta){delta=DD(old.eta,eta);flag=delta>0?'delayed':delta<0?'expedited':'edited';}await logA(id,baId,'eta',old.eta||'',eta||'',flag,delta);}
       if(old.status!==status)await logA(id,baId,'status',old.status,status,'status_change',null);
+      if(old.priority!==priority)await logA(id,baId,'priority',old.priority||'Medium',priority,'edited',null);
       if(old.proof_url!==proofUrl&&proofUrl)await logA(id,baId,'proof_url',old.proof_url||'',proofUrl,'edited',null);
       showToast('Task updated','success');
     }else{
-      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,remarks,proof_url:proofUrl,rework_count:0}).select().single();
+      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,status,priority,remarks,proof_url:proofUrl,rework_count:0}).select().single();
       await logA(nt.id,baId,'created','',status,'created',null);
       showToast('Task added','success');
     }
@@ -975,7 +996,11 @@ async function renderWorkload(){
     const st=wlStatus(score);
     const active=ut.filter(t=>t.status==='In Progress').length;
     const od=ut.filter(t=>OD(t.eta,t.status)).length;
-    return{...u,score,st,active,od,tasks:ut.length};
+    const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+2);
+    const atRisk=ut.filter(t=>!['Completed','Cancelled'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today).length;
+    const vhCount=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)&&t.priority==='Very High').length;
+    const assignable=od>0||score>am?'no':score>gm||atRisk>0||vhCount>1?'check':'yes';
+    return{...u,score,st,active,od,tasks:ut.length,atRisk,vhCount,assignable};
   }).sort((a,b)=>b.score-a.score);
   // Summary counts
   const over=scores.filter(s=>s.score>am).length;
@@ -984,7 +1009,10 @@ async function renderWorkload(){
   el.innerHTML=`
     <div class="phr">
       <div><div class="pt">Workload radar</div><div class="ps">Complexity-weighted task load per team member</div></div>
-      <button class="btn btn-g btn-sm" onclick="openWLSettings()">⚙ Adjust thresholds</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g btn-sm" onclick="exportTasksToExcel()">⬇ Export for MGT</button>
+        <button class="btn btn-g btn-sm" onclick="openWLSettings()">⚙ Adjust thresholds</button>
+      </div>
     </div>
     <div class="mrow">
       <div class="mc al"><div class="mv">${over}</div><div class="ml">Overloaded</div></div>
@@ -1004,10 +1032,11 @@ async function renderWorkload(){
         const color=s.score<=gm?'var(--green)':s.score<=am?'var(--amber)':'var(--red)';
         return `<div class="wlrow">
           <div class="wln">
-            <span>${s.name} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.tasks} tasks · ${s.active} active${s.od?` · <span style="color:var(--red)">${s.od} late</span>`:''}</span></span>
+            <span>${s.name} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.tasks} tasks · ${s.active} active${s.od?` · <span style="color:var(--red)">${s.od} late</span>`:''}${s.vhCount?` · <span style="color:var(--red)">⚡${s.vhCount} very high</span>`:''}${s.atRisk?` · <span style="color:var(--amber)">⚠${s.atRisk} at risk</span>`:''}</span></span>
             <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-family:var(--mono);font-size:11px;color:${color}">${s.score}pts</span>
+              <span style="font-family:var(--mono);font-size:11px;color:${color}">${Math.round(s.score*10)/10}pts</span>
               <span class="${s.st.cls}">${s.st.label}</span>
+              <span style="font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;${s.assignable==='yes'?'background:var(--gbg);color:var(--green)':s.assignable==='check'?'background:var(--abg);color:var(--amber)':'background:var(--rbg);color:var(--red)'}">${s.assignable==='yes'?'✓ Can assign':s.assignable==='check'?'⚠ Check first':'✗ Do not assign'}</span>
             </div>
           </div>
           <div class="wlbg"><div class="wlfill" style="width:${pct}%;background:${color}"></div></div>
@@ -1015,17 +1044,20 @@ async function renderWorkload(){
       }).join('')}
     </div>
     <div class="card">
-      <div class="ct">Who can pick up new work?</div>
-      ${scores.filter(s=>s.score<=gm).length===0
-        ? '<div class="es">Everyone is currently loaded. Consider reviewing on-hold tasks first.</div>'
-        : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">${
-          scores.filter(s=>s.score<=gm).map(s=>`<div style="background:var(--gbg);border:1px solid rgba(62,207,142,.2);border-radius:var(--r);padding:.75rem">
-            <div style="font-size:13px;font-weight:500;margin-bottom:2px">${s.name}</div>
-            <div style="font-size:11px;color:var(--green)">Load: ${s.score}pts — has capacity</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">${s.tasks} current tasks</div>
-          </div>`).join('')
-          }</div>`
-      }
+      <div class="ct">Assignment readiness — for management reporting</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+        ${scores.map(s=>{
+          const bg=s.assignable==='yes'?'var(--gbg)':s.assignable==='check'?'var(--abg)':'var(--rbg)';
+          const bc=s.assignable==='yes'?'rgba(62,207,142,.2)':s.assignable==='check'?'rgba(246,166,35,.2)':'rgba(245,101,101,.2)';
+          const lbl=s.assignable==='yes'?'✓ Can assign':s.assignable==='check'?'⚠ Check first':'✗ Do not assign';
+          const clr=s.assignable==='yes'?'var(--green)':s.assignable==='check'?'var(--amber)':'var(--red)';
+          return `<div style="background:${bg};border:1px solid ${bc};border-radius:var(--r);padding:.75rem">
+            <div style="font-size:13px;font-weight:500;margin-bottom:3px">${s.name}</div>
+            <div style="font-size:11px;color:${clr};font-weight:600;margin-bottom:4px">${lbl}</div>
+            <div style="font-size:10.5px;color:var(--text3)">${Math.round(s.score*10)/10}pts · ${s.tasks} tasks${s.od?` · <span style="color:var(--red)">${s.od} overdue</span>`:''}${s.vhCount?` · ${s.vhCount} very high priority`:''}</div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>`;
 }
 
@@ -1043,6 +1075,62 @@ function openWLSettings(){
   const panel=document.createElement('div');
   panel.id='wlSettingsPanel';panel.innerHTML=html;
   document.getElementById('pageWorkload').querySelector('.card').before(panel);
+}
+
+async function exportTasksToExcel(){
+  const {data:tasks}=await sb.from('tasks').select('*').order('ba_id').order('eta');
+  const allT=tasks||[];
+  const PRIORITY_ORDER={'Very High':1,'High':2,'Medium':3,'Low':4};
+  const rows=allT
+    .filter(t=>!['Completed','Cancelled'].includes(t.status))
+    .sort((a,b)=>(PRIORITY_ORDER[a.priority||'Medium']||3)-(PRIORITY_ORDER[b.priority||'Medium']||3))
+    .map(t=>{
+      const ba=AU.find(u=>u.id===t.ba_id);
+      return{
+        'BA Name':ba?.name||'Unknown',
+        'Project':t.project_name||'—',
+        'Task Description':t.description||'—',
+        'Task Type':t.task_type||'—',
+        'Priority':t.priority||'Medium',
+        'Status':t.status||'—',
+        'ETA':t.eta||'—',
+        'Overdue':OD(t.eta,t.status)?'YES':'',
+        'Remarks':t.remarks||'—'
+      };
+    });
+  // Summary sheet
+  const {data:allTasks}=await sb.from('tasks').select('*');
+  const summaryRows=AU.map(u=>{
+    const ut=(allTasks||[]).filter(t=>t.ba_id===u.id);
+    const active=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status));
+    const score=wlScore(active);
+    const st=wlStatus(score);
+    const od=active.filter(t=>OD(t.eta,t.status)).length;
+    const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+2);
+    const atRisk=active.filter(t=>t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today).length;
+    const assignable=od>0||score>parseInt(WS.amber_max||25)?'Do Not Assign':score>parseInt(WS.green_max||14)||atRisk>0?'Check First':'Can Assign';
+    return{
+      'BA Name':u.name,
+      'Workload Score':Math.round(score*10)/10,
+      'Status':st.label,
+      'Active Tasks':active.length,
+      'Overdue Tasks':od,
+      'At Risk (≤2d)':atRisk,
+      'Very High Priority':active.filter(t=>t.priority==='Very High').length,
+      'Assignment Readiness':assignable
+    };
+  });
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.json_to_sheet(summaryRows);
+  const ws2=XLSX.utils.json_to_sheet(rows);
+  // Column widths
+  ws1['!cols']=[{wch:20},{wch:14},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:20}];
+  ws2['!cols']=[{wch:20},{wch:22},{wch:35},{wch:22},{wch:12},{wch:14},{wch:12},{wch:8},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Assignment Readiness');
+  XLSX.utils.book_append_sheet(wb,ws2,'Task Details');
+  const date=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`BA_Workload_Report_${date}.xlsx`);
+  showToast('Export ready — check your downloads','success');
 }
 
 async function saveWLSettings(){
@@ -1063,7 +1151,7 @@ async function renderAIAdvisor(){
   const el=document.getElementById('pageAIAdvisor');
   chatHistory=[];
   el.innerHTML=`
-    <div class="phr"><div><div class="pt">AI advisor</div><div class="ps">Powered by Claude · has full context of your team's tasks and workload</div></div></div>
+    <div class="phr"><div><div class="pt">AI advisor</div><div class="ps">Powered by ${aiProviderLabel()} · has full context of your team's tasks and workload</div></div></div>
     <div class="aipanel">
       <div class="aih"><div class="aidot"></div><div class="ait">Proactive insights</div><button class="btn btn-g btn-sm" onclick="loadInsights()">Refresh ↺</button></div>
       <div id="aiInsights"><div style="font-size:12px;color:var(--text3)">Loading insights...</div></div>
@@ -1103,25 +1191,84 @@ async function buildAIContext(){
   return`You are an AI advisor helping a BA team manager at MyEG. Here is current team data:\n\nTEAM WORKLOAD (complexity-weighted):\n${scores.map(s=>`${s.name}: ${s.score}pts (${s.status}) — ${s.activeCount} active, ${s.overdueCount} overdue, ${s.pendingCount} pending${s.longPending.length?' — LONG PENDING: '+s.longPending.join('; '):''}`).join('\n')}\n\nACTIVE PROJECTS:\n${projSummary}\n\nThresholds: Available=0-${WS.green_max||14}pts, Busy=${parseInt(WS.green_max||14)+1}-${WS.amber_max||25}pts, Overloaded=${parseInt(WS.amber_max||25)+1}+pts\n\nRespond concisely and specifically. Reference actual names and project names. Be direct and actionable.`;
 }
 
+async function callAI(systemPrompt, messages, maxTokens=1000){
+  const provider=AI_PROVIDER||localStorage.getItem('ai_provider')||'claude';
+  if(provider==='claude'){
+    if(!ANTHROPIC_KEY)throw new Error('no_key');
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,system:systemPrompt,messages})
+    });
+    const d=await res.json();
+    if(d.error)throw new Error(d.error.message||'API error');
+    return d.content?.[0]?.text||'';
+  } else if(provider==='gemini'){
+    if(!GEMINI_KEY)throw new Error('no_key');
+    // Gemini 1.5 Flash via REST
+    const geminiMsgs=messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        system_instruction:{parts:[{text:systemPrompt}]},
+        contents:geminiMsgs,
+        generationConfig:{maxOutputTokens:maxTokens}
+      })
+    });
+    const d=await res.json();
+    if(d.error)throw new Error(d.error.message||'Gemini API error');
+    return d.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  } else if(provider==='openai'){
+    if(!OPENAI_KEY)throw new Error('no_key');
+    const res=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${OPENAI_KEY}`},
+      body:JSON.stringify({model:'gpt-4o',max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...messages]})
+    });
+    const d=await res.json();
+    if(d.error)throw new Error(d.error.message||'OpenAI error');
+    return d.choices?.[0]?.message?.content||'';
+  } else if(provider==='custom'){
+    if(!CUSTOM_AI_URL)throw new Error('no_key');
+    const res=await fetch(CUSTOM_AI_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json',...(CUSTOM_AI_KEY?{'Authorization':`Bearer ${CUSTOM_AI_KEY}`}:{})},
+      body:JSON.stringify({messages:[{role:'system',content:systemPrompt},...messages],max_tokens:maxTokens})
+    });
+    const d=await res.json();
+    return d.choices?.[0]?.message?.content||d.content?.[0]?.text||'';
+  }
+  throw new Error('Unknown provider');
+}
+
+function getActiveAIKey(){
+  const p=AI_PROVIDER||localStorage.getItem('ai_provider')||'claude';
+  if(p==='claude')return ANTHROPIC_KEY;
+  if(p==='gemini')return GEMINI_KEY;
+  if(p==='openai')return OPENAI_KEY;
+  if(p==='custom')return CUSTOM_AI_URL;
+  return '';
+}
+
+function aiProviderLabel(){
+  const p=AI_PROVIDER||localStorage.getItem('ai_provider')||'claude';
+  return{claude:'Claude',gemini:'Gemini',openai:'GPT-4o',custom:'Custom AI'}[p]||'AI';
+}
+
 async function loadInsights(){
-  if(!ANTHROPIC_KEY){
-    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3)">Set your Anthropic API key in <strong>Settings</strong> to enable AI insights.</div>`;
+  if(!getActiveAIKey()){
+    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3)">Set your ${aiProviderLabel()} API key in <strong>Settings → AI Advisor</strong> to enable insights.</div>`;
     return;
   }
   document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><div class="sp"></div> Analysing your team...</div>`;
   const ctx=await buildAIContext();
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:800,
-        system:ctx+'\n\nGenerate 4 proactive insights as JSON array. Each: {type:"warning"|"info"|"success"|"tip", icon:"⚠"|"💡"|"✓"|"→", title:string, body:string}. Return ONLY valid JSON array, no markdown.',
-        messages:[{role:'user',content:'Generate insights now.'}]
-      })
-    });
-    const d=await res.json();
-    const text=d.content?.[0]?.text||'[]';
+    const text=await callAI(
+      ctx+'\n\nGenerate 4 proactive insights as JSON array. Each: {type:"warning"|"info"|"success"|"tip", icon:"⚠"|"💡"|"✓"|"→", title:string, body:string}. Return ONLY valid JSON array, no markdown.',
+      [{role:'user',content:'Generate insights now.'}],
+      800
+    );
     const clean=text.replace(/```json|```/g,'').trim();
     const insights=JSON.parse(clean);
     const colors={warning:'var(--rbg)',info:'var(--bbg)',success:'var(--gbg)',tip:'var(--ag)'};
@@ -1132,7 +1279,7 @@ async function loadInsights(){
         <div class="aitext"><strong>${i.title}</strong><br>${i.body}</div>
       </div>`).join('');
   }catch(e){
-    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load insights. Check your Anthropic API key.</div>`;
+    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load insights. ${e.message==='no_key'?'Set your API key in Settings.':'Check your API key and connection.'}</div>`;
   }
 }
 
@@ -1155,29 +1302,18 @@ async function sendChat(){
   const inp=document.getElementById('chatIn');
   const q=inp.value.trim();
   if(!q)return;
-  if(!ANTHROPIC_KEY){addChatMsg('ai','Please set your Anthropic API key in Settings to use the AI advisor.');return;}
+  if(!getActiveAIKey()){addChatMsg('ai',`Please set your ${aiProviderLabel()} API key in Settings → AI Advisor to use the chat.`);return;}
   inp.value='';
   addChatMsg('user',q);
   chatHistory.push({role:'user',content:q});
-  // typing indicator
   const typDiv=addChatMsg('ai','<span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>');
   try{
     const ctx=await buildAIContext();
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:1000,
-        system:ctx,
-        messages:chatHistory
-      })
-    });
-    const d=await res.json();
-    const reply=d.content?.[0]?.text||'Sorry, I could not generate a response.';
+    const reply=await callAI(ctx,chatHistory,1000);
     typDiv.querySelector('.cb').innerHTML=reply.replace(/\n/g,'<br>');
     chatHistory.push({role:'assistant',content:reply});
   }catch(e){
-    typDiv.querySelector('.cb').innerHTML='Error connecting to AI. Check your API key.';
+    typDiv.querySelector('.cb').innerHTML='Error connecting to AI. Check your API key in Settings.';
   }
 }
 
@@ -1458,26 +1594,51 @@ async function renderKPI(){
   const {data:tasks}=await sb.from('tasks').select('*').gte('updated_at',ms);
   const scores=AU.map(u=>calcKPI(u,tasks||[])).sort((a,b)=>b.total-a.total);
   el.innerHTML=`
-    <div class="ph"><div class="pt">KPI scores</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
-    <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (35)</th><th>Timeliness (30)</th><th>Volume (20)</th><th>Coverage (15)</th><th>Total</th><th>Rating</th></tr></thead>
-    <tbody>${scores.map(s=>`<tr><td style="font-weight:500">${s.name}</td>
-      ${['quality:qScore:35','timeliness:tScore:30'].map(x=>{const[k,sk,m]=x.split(':');return`<td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(s[k])}%;height:100%;background:${KC(s[k])};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s[sk]}/${m}</span></div></td>`;}).join('')}
-      <td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(Math.min(s.volume/s.target,1)*100)}%;height:100%;background:${KC(s.volume/s.target*100)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.vScore}/20</span></div></td>
-      <td><div style="display:flex;align-items:center;gap:5px"><div style="width:60px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${Math.round(s.coverage)}%;height:100%;background:${KC(s.coverage)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.cScore}/15</span></div></td>
-      <td style="font-family:var(--mono);font-size:15px;font-weight:600;color:${KC(s.total)}">${s.total}</td>
-      <td><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></td>
-    </tr>`).join('')}</tbody></table></div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${scores.map(s=>`<div class="bacard" onclick="showKPID('${s.id}')"><div style="font-size:12.5px;font-weight:600;margin-bottom:3px">${s.name}</div><div style="font-size:24px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}</div><div style="font-size:10px;color:var(--text3);margin-bottom:6px">/100 pts</div><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></div>`).join('')}</div>
+    <div class="ph"><div class="pt">KPI scores</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})} · Quality 50pts · Timeliness 50pts</div></div>
+    <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (50)</th><th>Timeliness (50)</th><th>Avg US/CR Days</th><th>Avg All Days</th><th>Rework%</th><th>At Risk</th><th>Total</th><th>Rating</th></tr></thead>
+    <tbody>${scores.map(s=>{
+      const qDisp=s.qScore!=null?`<div style="display:flex;align-items:center;gap:5px"><div style="width:55px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${s.quality||0}%;height:100%;background:${KC(s.quality||0)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.qScore}/50</span></div>`:`<span style="color:var(--text3);font-size:10.5px;font-family:var(--mono)">—</span>`;
+      const tDisp=s.tScore!=null?`<div style="display:flex;align-items:center;gap:5px"><div style="width:55px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${s.timeliness||0}%;height:100%;background:${KC(s.timeliness||0)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.tScore}/50</span></div>`:`<span style="color:var(--text3);font-size:10.5px;font-family:var(--mono)">—</span>`;
+      const totalDisp=s.total!=null?`<span style="font-family:var(--mono);font-size:15px;font-weight:600;color:${KC(s.total)}">${s.total}</span>`:`<span style="color:var(--text3);font-family:var(--mono)">—</span>`;
+      const ratingDisp=s.total!=null?`<span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span>`:`<span style="color:var(--text3);font-size:10.5px">No data</span>`;
+      const atRiskDisp=s.atRisk.length?`<span style="color:var(--red);font-weight:600;font-family:var(--mono);font-size:11px">⚠${s.atRisk.length}</span>`:`<span style="color:var(--text3);font-family:var(--mono);font-size:11px">—</span>`;
+      return`<tr><td style="font-weight:500">${s.name}</td>
+        <td>${qDisp}</td>
+        <td>${tDisp}</td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text2)">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text2)">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</td>
+        <td style="font-family:var(--mono);font-size:11px;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</td>
+        <td>${atRiskDisp}</td>
+        <td>${totalDisp}</td>
+        <td>${ratingDisp}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${scores.map(s=>`<div class="bacard" onclick="showKPID('${s.id}')"><div style="font-size:12.5px;font-weight:600;margin-bottom:3px">${s.name}</div><div style="font-size:24px;font-weight:700;font-family:var(--mono);color:${s.total!=null?KC(s.total):'var(--text3)'}">${s.total!=null?s.total:'—'}</div><div style="font-size:10px;color:var(--text3);margin-bottom:6px">${s.total!=null?'/100 pts':'No data yet'}</div>${s.total!=null?`<span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span>`:`<span style="font-size:10px;color:var(--text3)">Pending activity</span>`}</div>`).join('')}</div>
     <div id="kpiDetail"></div>`;
   window._kpiS=scores;
 }
 
 function showKPID(id){
   const s=window._kpiS?.find(x=>x.id===id);if(!s)return;
-  const rows=[{l:'Documentation quality',p:s.quality,sc:s.qScore,mx:35,n:`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`},{l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:30,n:`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`},{l:'US doc volume',p:Math.min(s.volume/s.target,1)*100,sc:s.vScore,mx:20,n:`${s.volume} docs (target: ${s.target})`},{l:'Project coverage',p:s.coverage,sc:s.cScore,mx:15,n:`${s.coverage}% documented`}];
+  const rows=[
+    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`:'No reviewed docs this period'},
+    {l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:50,n:s.hasCompleted?`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted} completed)`:'No completed tasks this period'},
+  ];
+  const extraStats=`
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:.85rem 0;padding:.75rem;background:var(--surface2);border-radius:var(--rs)">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Avg US/CR completion</div><div style="font-family:var(--mono);font-size:15px;font-weight:600">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</div></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Avg all task completion</div><div style="font-family:var(--mono);font-size:15px;font-weight:600">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</div></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Rework rate</div><div style="font-family:var(--mono);font-size:15px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</div></div>
+    </div>
+    ${s.atRisk.length?`<div style="padding:.6rem;background:var(--rbg);border-radius:var(--rs);margin-bottom:.75rem"><div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px">⚠ Tasks at risk (ETA ≤2 days)</div>${s.atRisk.map(t=>`<div style="font-size:10.5px;color:var(--text2)">• ${t.project_name} — ${t.description} <span style="color:var(--red);font-family:var(--mono)">(${t.eta})</span></div>`).join('')}</div>`:``}`;
+  const totalDisp=s.total!=null?`<span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span>`:`<span style="font-size:14px;color:var(--text3)">No data yet</span>`;
   document.getElementById('kpiDetail').innerHTML=`<div class="card"><div class="ct">${s.name} — breakdown</div>
-    ${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:42px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`).join('')}
-    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-size:13px;font-weight:500">Total</span><span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span></div>
+    ${rows.map(r=>{
+      if(r.p==null) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;font-size:11px;color:var(--text3)">—</div><div style="font-family:var(--mono);font-size:10.5px;color:var(--text3);width:42px;text-align:right">—/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`;
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:42px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`;
+    }).join('')}
+    ${extraStats}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-size:13px;font-weight:500">Total</span>${totalDisp}</div>
     ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
   </div>`;
   document.getElementById('kpiDetail').scrollIntoView({behavior:'smooth'});
@@ -1490,17 +1651,28 @@ async function renderMyKPI(){
   const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
   const {data:tasks}=await sb.from('tasks').select('*').eq('ba_id',CU.id).gte('updated_at',ms);
   const s=calcKPI(CU,tasks||[]);
-  const rows=[{l:'Documentation quality',p:s.quality,sc:s.qScore,mx:35,n:`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`},{l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:30,n:`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`},{l:'US doc volume',p:Math.min(s.volume/s.target,1)*100,sc:s.vScore,mx:20,n:`${s.volume} docs (target: ${s.target})`},{l:'Project coverage',p:s.coverage,sc:s.cScore,mx:15,n:`${s.coverage}%`}];
+  const rows=[
+    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`:'No reviewed docs this period'},
+    {l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:50,n:s.hasCompleted?`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`:'No completed tasks this period'},
+  ];
   el.innerHTML=`
     <div class="ph"><div class="pt">My KPI</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
-    <div class="card" style="max-width:500px">
+    <div class="card" style="max-width:520px">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;padding-bottom:.9rem;border-bottom:1px solid var(--border)">
         <div style="width:46px;height:46px;border-radius:50%;background:var(--ag);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent)">${INI(CU.name)}</div>
         <div><div style="font-size:14px;font-weight:600">${CU.name}</div><div style="font-size:11px;color:var(--text3)">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
         <div style="margin-left:auto;text-align:right"><div style="font-size:28px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}</div><span class="badge b-${RL(s.total)}">${RLbl(s.total)}</span></div>
       </div>
-      ${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px;transition:width .5s"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:40px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`).join('')}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:500">Total</span><span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span></div>
+      ${rows.map(r=>{
+        if(r.p==null) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;font-size:11px;color:var(--text3)">—</div><div style="font-family:var(--mono);font-size:10.5px;color:var(--text3);width:40px;text-align:right">—/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`;
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px;transition:width .5s"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:40px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`;
+      }).join('')}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:.75rem 0;padding:.65rem;background:var(--surface2);border-radius:var(--rs)">
+        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Avg US/CR days</div><div style="font-family:var(--mono);font-size:14px;font-weight:600">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</div></div>
+        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Avg all task days</div><div style="font-family:var(--mono);font-size:14px;font-weight:600">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</div></div>
+        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Rework rate</div><div style="font-family:var(--mono);font-size:14px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</div></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:500">Total</span>${s.total!=null?`<span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span>`:`<span style="font-size:14px;color:var(--text3)">No data yet</span>`}</div>
       ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
     </div>`;
 }
@@ -1508,24 +1680,39 @@ async function renderMyKPI(){
 function calcKPI(ba,tasks){
   const bt=tasks.filter(t=>t.ba_id===ba.id);
   const done=bt.filter(t=>t.status==='Completed');
+  // Timeliness — null/empty if no completed tasks
   const onTime=done.filter(t=>!t.eta||new Date(t.eta)>=new Date(t.updated_at)).length;
-  const timeliness=done.length?Math.round(onTime/done.length*100):100;
+  const hasCompleted=done.length>0;
+  const timeliness=hasCompleted?Math.round(onTime/done.length*100):null;
+  // Quality — null/empty if no reviewed docs
   const docs=bt.filter(t=>DOC_TYPES.includes(t.task_type)&&t.review_result);
   const passCount=docs.filter(t=>t.review_result==='Pass').length;
-  const reworkCount=docs.filter(t=>t.review_result==='Rework').length;
-  const quality=docs.length?Math.round(passCount/docs.length*100):100;
-  const volume=done.filter(t=>DOC_TYPES.includes(t.task_type)).length;
-  const target=ba.volume_target||4;
-  const projs=[...new Set(bt.map(t=>t.project_name))];
-  const doced=[...new Set(done.filter(t=>DOC_TYPES.includes(t.task_type)).map(t=>t.project_name))];
-  const coverage=projs.length?Math.round(doced.length/projs.length*100):100;
-  const qScore=Math.round(quality/100*35),tScore=Math.round(timeliness/100*30),vScore=Math.round(Math.min(volume/target,1)*20),cScore=Math.round(coverage/100*15);
-  const total=qScore+tScore+vScore+cScore;
+  const reworkCount=docs.filter(t=>t.review_result==='Rework'||t.rework_count>0).length;
+  const hasDocs=docs.length>0;
+  const quality=hasDocs?Math.round(passCount/docs.length*100):null;
+  // Avg completion time for US/CR docs
+  const doneDocs=done.filter(t=>DOC_TYPES.includes(t.task_type)&&t.created_at&&t.updated_at);
+  const avgDocDays=doneDocs.length?Math.round(doneDocs.reduce((s,t)=>s+DD(t.created_at,t.updated_at),0)/doneDocs.length):null;
+  // Avg completion time for all tasks
+  const doneAll=done.filter(t=>t.created_at&&t.updated_at);
+  const avgAllDays=doneAll.length?Math.round(doneAll.reduce((s,t)=>s+DD(t.created_at,t.updated_at),0)/doneAll.length):null;
+  // Rework rate
+  const docTotal=bt.filter(t=>DOC_TYPES.includes(t.task_type)).length;
+  const reworkRate=docTotal?Math.round(reworkCount/docTotal*100):null;
+  // Active tasks at risk (ETA within 2 days, not done)
+  const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+2);
+  const atRisk=bt.filter(t=>!['Completed','Cancelled'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today);
+  // Scores — 50pts each, empty (—) if no data
+  const qScore=quality!=null?Math.round(quality/100*50):null;
+  const tScore=timeliness!=null?Math.round(timeliness/100*50):null;
+  const hasScore=(qScore!=null||tScore!=null);
+  const total=hasScore?((qScore||0)+(tScore||0)):null;
   const notes=[];
-  if(quality<70)notes.push(`Low first-pass rate — ${reworkCount} rework${reworkCount>1?'s':''} this month`);
-  if(timeliness<75)notes.push('Frequent ETA slippage — check audit log');
-  if(volume<target)notes.push(`Below US doc target (${volume}/${target})`);
-  return{id:ba.id,name:ba.name,quality,timeliness,volume,target,coverage,qScore,tScore,vScore,cScore,total,passCount,reworkCount,onTime,totalCompleted:done.length,notes};
+  if(quality!=null&&quality<70)notes.push(`Low first-pass rate — ${reworkCount} rework${reworkCount!==1?'s':''}`);
+  if(timeliness!=null&&timeliness<75)notes.push('Frequent ETA slippage — check audit log');
+  if(atRisk.length)notes.push(`${atRisk.length} task${atRisk.length!==1?'s':''} at risk (ETA ≤2 days)`);
+  if(!hasCompleted&&!hasDocs)notes.push('No completed tasks or reviewed docs this period — KPI pending');
+  return{id:ba.id,name:ba.name,quality,timeliness,qScore,tScore,total,passCount,reworkCount,reworkRate,onTime,totalCompleted:done.length,avgDocDays,avgAllDays,atRisk,notes,hasDocs,hasCompleted};
 }
 function KC(p){return p>=85?'var(--green)':p>=70?'var(--blue)':p>=55?'var(--amber)':'var(--red)';}
 function RLbl(s){return s>=90?'Excellent':s>=75?'Good':s>=60?'Needs improvement':'Critical';}
@@ -1818,7 +2005,7 @@ async function renderAdmin(){
           <div class="uav">${INI(u.name)}</div>
           <div style="flex:1">
             <div style="font-size:12.5px;font-weight:500">${u.name}</div>
-            <div style="font-size:10.5px;color:var(--text3)">${u.email} · ${r?.name||u.role||'BA'} · target: ${u.volume_target} docs/mo</div>
+            <div style="font-size:10.5px;color:var(--text3)">${u.email} · ${r?.name||u.role||'BA'}</div>
           </div>
           <span style="font-size:10.5px;background:var(--ag);color:var(--accent);padding:2px 7px;border-radius:10px">${r?.name||u.role||'BA'}</span>
           <button class="btn btn-g btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
@@ -1832,7 +2019,6 @@ function openAddUser(){
   document.getElementById('uId').value='';
   document.getElementById('userModalTitle').textContent='Add member';
   ['uName','uEmail','uPin'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('uTarget').value='4';
   document.getElementById('pinHint').textContent='Required for new accounts';
   fillRoleSel('');OM('userModal');
 }
@@ -1844,7 +2030,6 @@ function openEditUser(id){
   document.getElementById('uName').value=u.name;
   document.getElementById('uEmail').value=u.email;
   document.getElementById('uPin').value='';
-  document.getElementById('uTarget').value=u.volume_target;
   document.getElementById('pinHint').textContent='Leave blank to keep current PIN';
   fillRoleSel(u.role_id);OM('userModal');
 }
@@ -1859,17 +2044,16 @@ async function saveUser(){
   const email=document.getElementById('uEmail').value.trim().toLowerCase();
   const pin=document.getElementById('uPin').value.trim();
   const roleId=document.getElementById('uRoleId').value;
-  const target=parseInt(document.getElementById('uTarget').value)||4;
   if(!name||!email){showToast('Name and email required','error');return;}
   if(!id&&(pin.length!==4||!/^\d{4}$/.test(pin))){showToast('4-digit PIN required','error');return;}
   if(id){
-    const upd={name,email,role_id:roleId,volume_target:target};
+    const upd={name,email,role_id:roleId};
     if(pin.length===4)upd.pin_hash=pin;
     await sb.from('users').update(upd).eq('id',id);
     if(CU.id===id){CU={...CU,...upd};sessionStorage.setItem('ba_user',JSON.stringify(CU));}
     showToast('Updated','success');
   }else{
-    await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,volume_target:target,role:'ba'});
+    await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,role:'ba'});
     showToast('Member added','success');
   }
   CM('userModal');await loadBase();renderAdmin();
@@ -2140,7 +2324,7 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
   // ── Chart 5: KPI scores per BA ──
   const kpiScores = members.map(u => {
     const s = calcKPI(u, tasks);
-    return { name: u.name, quality: s.qScore, timeliness: s.tScore, volume: s.vScore, coverage: s.cScore, total: s.total };
+    return { name: u.name, quality: s.qScore, timeliness: s.tScore, coverage: s.cScore, total: s.total };
   });
   // ── Chart 6: Completion trend over time (weekly buckets) ──
   const weekBuckets = {};
@@ -2205,12 +2389,10 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
   } else {
     document.getElementById('ch6').parentElement.innerHTML='<div class="es">No completion data in range</div>';
   }
-  // ch7 — KPI stacked
+  // ch7 — KPI stacked (50/50)
   _charts.ch7 = new Chart(document.getElementById('ch7'),{type:'bar',data:{labels:kpiScores.map(s=>s.name.split(' ')[0]),datasets:[
-    {label:'Quality (35)',data:kpiScores.map(s=>s.quality),backgroundColor:'#7c6cfa',borderRadius:2},
-    {label:'Timeliness (30)',data:kpiScores.map(s=>s.timeliness),backgroundColor:'#3ecf8e',borderRadius:2},
-    {label:'Volume (20)',data:kpiScores.map(s=>s.volume),backgroundColor:'#f6a623',borderRadius:2},
-    {label:'Coverage (15)',data:kpiScores.map(s=>s.coverage),backgroundColor:'#4da6ff',borderRadius:2},
+    {label:'Quality (50)',data:kpiScores.map(s=>s.quality!=null?s.qScore:0),backgroundColor:'#7c6cfa',borderRadius:2},
+    {label:'Timeliness (50)',data:kpiScores.map(s=>s.timeliness!=null?s.tScore:0),backgroundColor:'#3ecf8e',borderRadius:2},
   ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,max:100,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
 }
 
@@ -2253,17 +2435,41 @@ async function renderSettings(){
       <button class="btn btn-a btn-sm" style="margin-top:.5rem" onclick="saveStateHolidays()">Save holidays</button>
     </div>
     <div class="card">
-      <div class="ct">Anthropic API key <span style="font-size:10px;font-weight:400;color:var(--text3)">(stored locally in your browser)</span></div>
-      <div class="fhint" style="margin-bottom:.75rem">Required for the AI Advisor. Your key is saved only in this browser and never sent to our servers.</div>
-      <div class="ff" style="max-width:480px">
-        <label class="flb">API key</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input type="password" class="finp" id="ws_anthropic_key" value="${localStorage.getItem('anthropic_api_key')||''}" placeholder="sk-ant-..." style="flex:1;font-family:var(--mono);font-size:12px">
-          <button class="btn btn-sm" id="keyVisBtn" onclick="toggleKeyVis()" style="min-width:56px">Show</button>
-        </div>
+      <div class="ct">Priority multipliers <span style="font-size:10px;font-weight:400;color:var(--text3)">(applied on top of task type weight)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:.85rem">
+        ${[{p:'Very High',k:'priority_mult_very_high',def:1.5},{p:'High',k:'priority_mult_high',def:1.25},{p:'Medium',k:'priority_mult_medium',def:1.0},{p:'Low',k:'priority_mult_low',def:0.75}].map(x=>`<div class="ff" style="margin:0"><label class="flb" style="font-size:9.5px">${x.p}</label><input type="number" class="finp" id="ws_${x.k}" value="${WS[x.k]||x.def}" min="0.1" max="3" step="0.05" style="max-width:80px;padding:4px 8px;font-size:12px"></div>`).join('')}
       </div>
-      <button class="btn btn-a btn-sm" onclick="saveAnthropicKey()">Save key</button>
+      <div class="fhint" style="margin-bottom:.75rem">Multiplied with task type weight. E.g. US Doc (3pts) × Very High (1.5) = 4.5pts workload score.</div>
+      <button class="btn btn-a btn-sm" onclick="savePriorityMultipliers()">Save multipliers</button>
+    </div>
+    <div class="card">
+      <div class="ct">AI Advisor — provider &amp; API key</div>
+      <div class="fhint" style="margin-bottom:.85rem">Your API keys are saved only in this browser and never sent to our servers. Select which AI provider to use for the AI Advisor.</div>
+      <div class="ff" style="max-width:340px">
+        <label class="flb">AI Provider</label>
+        <select class="fsel" id="ws_ai_provider" onchange="onAIProviderChange()">
+          <option value="claude" ${(localStorage.getItem('ai_provider')||'claude')==='claude'?'selected':''}>Claude (Anthropic)</option>
+          <option value="gemini" ${localStorage.getItem('ai_provider')==='gemini'?'selected':''}>Gemini (Google)</option>
+          <option value="openai" ${localStorage.getItem('ai_provider')==='openai'?'selected':''}>GPT-4o (OpenAI)</option>
+          <option value="custom" ${localStorage.getItem('ai_provider')==='custom'?'selected':''}>Custom endpoint</option>
+        </select>
+      </div>
+      <div id="aiKeyFields"></div>
+      <button class="btn btn-a btn-sm" style="margin-top:4px" onclick="saveAIConfig()">Save AI config</button>
     </div>`;
+  // Render the correct key fields on load
+  setTimeout(()=>onAIProviderChange(),10);
+}
+}
+
+async function savePriorityMultipliers(){
+  const keys=[{k:'priority_mult_very_high'},{k:'priority_mult_high'},{k:'priority_mult_medium'},{k:'priority_mult_low'}];
+  for(const {k} of keys){
+    const val=document.getElementById(`ws_${k}`)?.value;
+    if(val) await sb.from('workload_settings').upsert({key:k,value:val});
+  }
+  await loadBase();
+  showToast('Priority multipliers saved','success');
 }
 
 async function saveThresholds(){
@@ -2296,17 +2502,76 @@ async function saveStateHolidays(){
   showToast('State holidays saved','success');
 }
 
-function toggleKeyVis(){
-  const inp=document.getElementById('ws_anthropic_key');
-  const btn=document.getElementById('keyVisBtn');
+function onAIProviderChange(){
+  const provider=document.getElementById('ws_ai_provider')?.value||'claude';
+  const fields=document.getElementById('aiKeyFields');
+  if(!fields)return;
+  const keyEntry=(id,placeholder,stored,label)=>`
+    <div class="ff" style="max-width:480px;margin-top:.65rem">
+      <label class="flb">${label}</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="password" class="finp" id="${id}" value="${stored||''}" placeholder="${placeholder}" style="flex:1;font-family:var(--mono);font-size:12px">
+        <button class="btn btn-sm" onclick="toggleAIKeyVis('${id}',this)" style="min-width:56px">Show</button>
+      </div>
+    </div>`;
+  if(provider==='claude'){
+    fields.innerHTML=keyEntry('ws_ai_key_claude','sk-ant-api03-...',localStorage.getItem('anthropic_api_key'),'Anthropic API key');
+  } else if(provider==='gemini'){
+    fields.innerHTML=keyEntry('ws_ai_key_gemini','AIza...',localStorage.getItem('gemini_api_key'),'Google Gemini API key');
+  } else if(provider==='openai'){
+    fields.innerHTML=keyEntry('ws_ai_key_openai','sk-...',localStorage.getItem('openai_api_key'),'OpenAI API key');
+  } else if(provider==='custom'){
+    fields.innerHTML=`
+      <div class="ff" style="max-width:480px;margin-top:.65rem">
+        <label class="flb">Custom endpoint URL <span style="color:var(--text3);font-weight:400;text-transform:none">(OpenAI-compatible)</span></label>
+        <input type="url" class="finp" id="ws_ai_custom_url" value="${localStorage.getItem('custom_ai_url')||''}" placeholder="https://your-llm-endpoint.com/v1/chat/completions">
+      </div>
+      ${keyEntry('ws_ai_key_custom','Bearer token or API key',localStorage.getItem('custom_ai_key'),'API key / Bearer token')}`;
+  }
+}
+
+function toggleAIKeyVis(id,btn){
+  const inp=document.getElementById(id);
+  if(!inp)return;
   if(inp.type==='password'){inp.type='text';btn.textContent='Hide';}
   else{inp.type='password';btn.textContent='Show';}
 }
 
+function saveAIConfig(){
+  const provider=document.getElementById('ws_ai_provider')?.value||'claude';
+  localStorage.setItem('ai_provider',provider);
+  AI_PROVIDER=provider;
+  if(provider==='claude'){
+    const v=document.getElementById('ws_ai_key_claude')?.value.trim();
+    if(v){localStorage.setItem('anthropic_api_key',v);ANTHROPIC_KEY=v;}
+    else{localStorage.removeItem('anthropic_api_key');ANTHROPIC_KEY='';}
+  } else if(provider==='gemini'){
+    const v=document.getElementById('ws_ai_key_gemini')?.value.trim();
+    if(v){localStorage.setItem('gemini_api_key',v);GEMINI_KEY=v;}
+    else{localStorage.removeItem('gemini_api_key');GEMINI_KEY='';}
+  } else if(provider==='openai'){
+    const v=document.getElementById('ws_ai_key_openai')?.value.trim();
+    if(v){localStorage.setItem('openai_api_key',v);OPENAI_KEY=v;}
+    else{localStorage.removeItem('openai_api_key');OPENAI_KEY='';}
+  } else if(provider==='custom'){
+    const url=document.getElementById('ws_ai_custom_url')?.value.trim();
+    const key=document.getElementById('ws_ai_key_custom')?.value.trim();
+    if(url){localStorage.setItem('custom_ai_url',url);CUSTOM_AI_URL=url;}
+    else{localStorage.removeItem('custom_ai_url');CUSTOM_AI_URL='';}
+    if(key){localStorage.setItem('custom_ai_key',key);CUSTOM_AI_KEY=key;}
+    else{localStorage.removeItem('custom_ai_key');CUSTOM_AI_KEY='';}
+  }
+  showToast('AI config saved','success');
+}
+
+function toggleKeyVis(){
+  // legacy — kept for safety
+  toggleAIKeyVis('ws_ai_key_claude',document.getElementById('keyVisBtn'));
+}
+
 function saveAnthropicKey(){
-  const val=document.getElementById('ws_anthropic_key')?.value.trim();
-  if(val){localStorage.setItem('anthropic_api_key',val);ANTHROPIC_KEY=val;showToast('API key saved','success');}
-  else{localStorage.removeItem('anthropic_api_key');ANTHROPIC_KEY='';showToast('API key cleared','success');}
+  // legacy — kept for safety
+  saveAIConfig();
 }
 
 // ══════════════════════════════════
