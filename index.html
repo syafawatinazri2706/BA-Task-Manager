@@ -2150,7 +2150,7 @@ async function confirmImport(){
   if(!ok.length){showToast('No valid rows to import','error');return;}
   const btn=document.getElementById('confirmImpBtn');
   btn.disabled=true;btn.textContent='Importing...';
-  let imported=0;
+  let imported=0,failed=0;
   if(importType==='projects'){
     for(const row of ok){
       const aBA=AU.find(u=>u.name.toLowerCase()===(row['Assigned BA Name']||'').toLowerCase());
@@ -2197,12 +2197,21 @@ async function confirmImport(){
       const rawPriority=String(row['Priority']||'').trim();
       const priority=VALID_PRIORITIES.includes(rawPriority)?rawPriority:'Medium';
       const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,start_date:startDate,status:row['Status']||'To Do',priority,remarks:row['Remarks']||null,rework_count:0,eta_edit_count:0,total_paused_days:0}).select().single();
-      if(!error){await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;}
+      if(error){
+        console.error(`Row ${row._row} failed:`,error.message);
+        failed++;
+      } else {
+        await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;
+      }
     }
   }
   await loadBase();
-  showToast(`Imported ${imported} ${importType}`,'success');
-  btn.disabled=false;btn.textContent='Import done';
+  if(failed>0){
+    showToast(`Imported ${imported} — ${failed} failed. Check browser console (F12) for details.`,'error');
+  } else {
+    showToast(`Successfully imported ${imported} ${importType} ✓`,'success');
+  }
+  btn.disabled=false;btn.textContent=imported>0?'Import done':'Import failed';
   renderImport();
 }
 
