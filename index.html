@@ -2183,16 +2183,17 @@ async function confirmImport(){
 function dlTemplate(){
   const headers=importType==='projects'
     ?['Project Name','Status','Assigned BA Name','Secondary BA Name','Supervising BA Name','Project Manager','Business Owner','Jira URL','Description']
-    :['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)','Remarks'];
+    :['BA Name','Project Name','Task Type','Description','Status','Priority','ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)','Remarks'];
   const sample=importType==='projects'
     ?[['JMYR Admin Portal','In Progress','Syafawati','','Shahidah','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
-    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','To Do','10/05/2026','01/05/2026','Notes here']];
+    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','To Do','High','10/05/2026','01/05/2026','Notes here']];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([headers,...sample]);
   ws['!cols']=headers.map(()=>({wch:22}));
-  // Force ETA column (index 5) to text format to prevent Excel converting to date serial
+  // Force ETA & Start Date columns to text format to prevent Excel converting to date serial
+  // Priority is index 5, ETA is index 6, Start Date is index 7
   if(importType==='tasks'){
-    const etaColIdx=5, startColIdx=6;
+    const etaColIdx=6, startColIdx=7;
     for(let r=1;r<=sample.length;r++){
       [etaColIdx,startColIdx].forEach(ci=>{
         const cellAddr=XLSX.utils.encode_cell({r,c:ci});
