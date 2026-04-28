@@ -2095,25 +2095,51 @@ function previewImport(data){
   const validated=data.map((row,i)=>{
     const errors=[];
     g.required.forEach(col=>{if(!row[col]||String(row[col]).trim()==='')errors.push(`Missing: ${col}`);});
-    if(importType==='projects'&&row['Status']&&!PROJ_STATUSES.includes(row['Status']))errors.push(`Invalid status: ${row['Status']}`);
-    if(importType==='tasks'&&row['Task Type']&&!TASK_TYPES.includes(row['Task Type']))errors.push(`Invalid task type: ${row['Task Type']}`);
-    if(importType==='tasks'&&row['Status']&&!TASK_STATUSES.includes(row['Status']))errors.push(`Invalid status: ${row['Status']}`);
+    if(importType==='projects'&&row['Status']&&!PROJ_STATUSES.includes(row['Status']))errors.push(`Invalid status: "${row['Status']}"`);
+    if(importType==='tasks'&&row['Task Type']&&!TASK_TYPES.includes(row['Task Type']))errors.push(`Invalid task type: "${row['Task Type']}"`);
+    if(importType==='tasks'&&row['Status']&&!TASK_STATUSES.includes(row['Status']))errors.push(`Invalid status: "${row['Status']}"`);
+    if(importType==='tasks'&&row['BA Name']&&!AU.find(u=>u.name.toLowerCase()===String(row['BA Name']).toLowerCase()))errors.push(`BA not found: "${row['BA Name']}"`);
     return{...row,_row:i+2,_ok:errors.length===0,_errors:errors};
   });
   importRows=validated;
   const ok=validated.filter(r=>r._ok).length,bad=validated.filter(r=>!r._ok).length;
-  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)'];
+  const errorRows=validated.filter(r=>!r._ok);
+  const cols=importType==='projects'
+    ?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']
+    :['BA Name','Project Name','Task Type','Description','Priority','Status','ETA (DD/MM/YYYY)'];
+
+  const errorSection=errorRows.length?`
+    <div style="margin:.75rem 0;padding:.75rem;background:var(--rbg);border-radius:var(--rs);border:1px solid rgba(245,101,101,.2)">
+      <div style="font-size:11.5px;font-weight:600;color:var(--red);margin-bottom:.5rem">⚠ ${bad} row${bad>1?'s':''} with errors — will be skipped</div>
+      ${errorRows.map(r=>`<div style="font-size:11px;color:var(--text2);margin-bottom:3px;display:flex;gap:8px">
+        <span style="color:var(--text3);font-family:var(--mono);min-width:40px">Row ${r._row}</span>
+        <span style="color:var(--red)">${r._errors.join(' · ')}</span>
+        <span style="color:var(--text3);font-size:10px">(${String(r['BA Name']||r['Project Name']||'').slice(0,30)}…)</span>
+      </div>`).join('')}
+    </div>`:'';
+
   document.getElementById('impPreview').innerHTML=`
-    <div style="margin-bottom:.5rem;font-size:12px">
-      <span style="color:var(--green)">${ok} valid rows</span> · <span style="color:var(--red)">${bad} errors</span> · ${validated.length} total
+    <div style="margin:.6rem 0;font-size:12px;display:flex;align-items:center;gap:10px">
+      <span style="color:var(--green);font-weight:500">✓ ${ok} valid</span>
+      ${bad?`<span style="color:var(--red);font-weight:500">✗ ${bad} error${bad>1?'s':''}</span>`:''}
+      <span style="color:var(--text3)">${validated.length} total rows</span>
     </div>
-    <div style="overflow-x:auto;max-height:280px;overflow-y:auto">
-    <table style="width:100%;font-size:11px;border-collapse:collapse">
-      <thead><tr><th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">#</th><th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">Status</th>${cols.map(c=>`<th style="background:var(--surface3);padding:4px 7px;text-align:left;font-size:9.5px">${c}</th>`).join('')}</tr></thead>
-      <tbody>${validated.slice(0,50).map(r=>`<tr>
-        <td style="padding:4px 7px;border-bottom:1px solid var(--border);color:var(--text3)">${r._row}</td>
-        <td style="padding:4px 7px;border-bottom:1px solid var(--border)">${r._ok?`<span style="color:var(--green);font-size:10px">✓ ok</span>`:`<span style="color:var(--red);font-size:10px">✗ ${r._errors.join('; ')}</span>`}</td>
-        ${cols.map(c=>`<td style="padding:4px 7px;border-bottom:1px solid var(--border);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r[c]||'—'}</td>`).join('')}
+    ${errorSection}
+    <div style="font-size:10.5px;color:var(--text3);margin-bottom:4px">Preview (showing up to 50 rows)</div>
+    <div style="overflow-x:auto;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--rs)">
+    <table style="width:100%;font-size:11px;border-collapse:collapse;min-width:700px">
+      <thead><tr style="position:sticky;top:0;z-index:1">
+        <th style="background:var(--surface3);padding:5px 8px;text-align:left;font-size:9.5px;white-space:nowrap">#</th>
+        <th style="background:var(--surface3);padding:5px 8px;text-align:left;font-size:9.5px;white-space:nowrap">Status</th>
+        ${cols.map(c=>`<th style="background:var(--surface3);padding:5px 8px;text-align:left;font-size:9.5px;white-space:nowrap">${c}</th>`).join('')}
+      </tr></thead>
+      <tbody>${validated.slice(0,50).map(r=>`<tr style="background:${r._ok?'transparent':'rgba(245,101,101,.04)'}">
+        <td style="padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text3);font-family:var(--mono)">${r._row}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--border);white-space:nowrap">${r._ok
+          ?`<span style="color:var(--green);font-size:10px">✓ ok</span>`
+          :`<span style="color:var(--red);font-size:10px" title="${r._errors.join('; ')}">✗ ${r._errors[0]}${r._errors.length>1?` +${r._errors.length-1}`:''}</span>`
+        }</td>
+        ${cols.map(c=>`<td style="padding:5px 8px;border-bottom:1px solid var(--border);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r[c]||''}">${r[c]||'—'}</td>`).join('')}
       </tr>`).join('')}</tbody>
     </table></div>`;
   if(ok>0){document.getElementById('confirmImpBtn').style.display='inline-flex';document.getElementById('confirmImpBtn').textContent=`Import ${ok} valid row${ok>1?'s':''}`;}
