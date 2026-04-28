@@ -405,8 +405,14 @@ tr:hover td{background:rgba(255,255,255,.012)}
           <div class="fhint" id="pinHint">Required for new accounts</div></div>
         <div class="ff"><label class="flb">Role</label><select class="fsel" id="uRoleId"></select></div>
       </div>
-
-    </div>
+      <div class="ff" id="hideToggleFF" style="display:none">
+        <label class="flb">Privacy</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2)">
+          <input type="checkbox" id="uHideFromNonMgr" style="width:15px;height:15px;accent-color:var(--accent)">
+          Hide this user's tasks and KPI from non-managers
+        </label>
+        <div class="fhint">When enabled, only users with the Manager role can see this person's tasks, KPI, and workload data.</div>
+      </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('userModal')">Cancel</button><button class="btn btn-a" onclick="saveUser()">Save</button></div>
   </div>
 </div>
@@ -477,6 +483,21 @@ let AR = []; // all roles
 let WS = {}; // workload settings
 let BA_LEAVES = []; // [{id, ba_id, start_date, end_date, reason}]
 let CP = ''; // current page
+
+// Returns true if a role has is_manager flag OR is named 'manager' (fallback)
+function isManagerRole(roleId){
+  const r=AR.find(x=>x.id===roleId);
+  return r?(r.is_manager===true||r.name?.toLowerCase()==='manager'):false;
+}
+// Returns true if current user can see the target user's data
+function visibleToCurrentUser(u){
+  if(!u) return false;
+  if(u.id===CU?.id) return true;
+  if(!u.hide_from_non_managers) return true;
+  return isManagerRole(CU?.role_id);
+}
+// Filtered AU — hides protected users from non-managers
+function visibleAU(){ return AU.filter(u=>visibleToCurrentUser(u)); }
 let importType = 'projects';
 let importRows = [];
 let chatHistory = [];
@@ -1022,7 +1043,7 @@ function onStatusChange(){
 function chkReview(){ onTaskTypeChange(); } // backward compat
 
 function populateAssignee(selId){
-  const opts = can('create_task_any')?AU:AU.filter(u=>u.id===CU.id);
+  const opts = can('create_task_any')?visibleAU():AU.filter(u=>u.id===CU.id);
   document.getElementById('tAssignee').innerHTML=opts.map(u=>`<option value="${u.id}" ${u.id===selId?'selected':''}>${u.name}</option>`).join('');
 }
 
@@ -1160,7 +1181,7 @@ async function renderWorkload(){
   const {data:tasks}=await sb.from('tasks').select('*');
   const allT=tasks||[];
   const gm=parseInt(WS.green_max||14),am=parseInt(WS.amber_max||25),maxScore=am+15;
-  const members=AU.filter(u=>u.id!==null);
+  const members=visibleAU();
   const scores=members.map(u=>{
     const ut=allT.filter(t=>t.ba_id===u.id);
     const score=wlScore(ut);
@@ -1271,7 +1292,7 @@ async function exportTasksToExcel(){
     });
   // Summary sheet
   const {data:allTasks}=await sb.from('tasks').select('*');
-  const summaryRows=AU.map(u=>{
+  const summaryRows=visibleAU().map(u=>{
     const ut=(allTasks||[]).filter(t=>t.ba_id===u.id);
     const active=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status));
     const score=wlScore(active);
@@ -1344,7 +1365,7 @@ async function renderAIAdvisor(){
 async function buildAIContext(){
   const {data:tasks}=await sb.from('tasks').select('*');
   const allT=tasks||[];
-  const scores=AU.map(u=>{
+  const scores=visibleAU().map(u=>{
     const ut=allT.filter(t=>t.ba_id===u.id);
     const score=wlScore(ut);
     const st=wlStatus(score);
@@ -1588,7 +1609,7 @@ function buildProjGrid(projects){
 }
 
 function fillBASels(aId,s2Id,supId){
-  const opts=`<option value="">— None —</option>`+AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  const opts=`<option value="">— None —</option>`+visibleAU().map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
   ['pBA','pBA2','pBASup'].forEach(id=>{document.getElementById(id).innerHTML=opts;});
   if(aId)document.getElementById('pBA').value=aId;
   if(s2Id)document.getElementById('pBA2').value=s2Id;
@@ -1651,7 +1672,7 @@ async function renderDashboard(){
       <div class="mc al"><div class="mv">${od}</div><div class="ml">Overdue</div></div>
     </div>`;
   // Workload mini-radar
-  const scores=AU.map(u=>{const ut=allT.filter(t=>t.ba_id===u.id);const s=wlScore(ut);const st=wlStatus(s);return{...u,score:s,st};}).sort((a,b)=>b.score-a.score);
+  const scores=visibleAU().map(u=>{const ut=allT.filter(t=>t.ba_id===u.id);const s=wlScore(ut);const st=wlStatus(s);return{...u,score:s,st};}).sort((a,b)=>b.score-a.score);
   const maxS=parseInt(WS.amber_max||25)+15;
   html+=`<div class="card"><div class="ct">Workload at a glance <button class="btn btn-g btn-sm" onclick="navigateTo('Workload')" style="margin-left:auto">Full view →</button></div>
     ${scores.slice(0,8).map(s=>`<div class="wlrow"><div class="wln"><span>${s.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-family:var(--mono);font-size:10px;color:${s.score>parseInt(WS.amber_max||25)?'var(--red)':s.score>parseInt(WS.green_max||14)?'var(--amber)':'var(--green)'}">${s.score}pts</span><span class="${s.st.cls}">${s.st.label}</span></div></div><div class="wlbg"><div class="wlfill" style="width:${Math.min(s.score/maxS*100,100)}%;background:${s.score>parseInt(WS.amber_max||25)?'var(--red)':s.score>parseInt(WS.green_max||14)?'var(--amber)':'var(--green)'}"></div></div></div>`).join('')}
@@ -1684,7 +1705,7 @@ async function renderAllTasks(){
     <div class="card">
       <div class="ar">
         <input class="si" id="tSrch" placeholder="Search..." oninput="filterAT()" style="width:170px">
-        <select class="si" id="fBA" onchange="filterAT()"><option value="All">All BAs</option>${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+        <select class="si" id="fBA" onchange="filterAT()"><option value="All">All BAs</option>${visibleAU().map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
         <select class="si" id="fSt" onchange="filterAT()"><option value="All">All statuses</option>${TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
         <select class="si" id="fTy" onchange="filterAT()"><option value="All">All types</option>${TASK_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
       </div>
@@ -1729,7 +1750,7 @@ async function renderAuditLog(){
   const avgDelay=delays.length&&delays.some(e=>e.days_delta)?Math.round(delays.filter(e=>e.days_delta).reduce((s,e)=>s+e.days_delta,0)/delays.filter(e=>e.days_delta).length):null;
 
   // Per-BA ETA summary
-  const baEtaSummary=AU.map(u=>{
+  const baEtaSummary=visibleAU().map(u=>{
     const baEta=etaEntries.filter(e=>e.ba_id===u.id&&e.flag_type!=='leave_adjustment');
     const baDelays=baEta.filter(e=>e.flag_type==='delayed');
     const baExp=baEta.filter(e=>e.flag_type==='expedited');
@@ -1779,7 +1800,7 @@ async function renderAuditLog(){
       <div class="card">
         <div class="ct">ETA change history — detail</div>
         <div class="ar" style="margin-bottom:.75rem">
-          <select class="si" id="etaBAFilter" onchange="filterETALog()"><option value="all">All BAs</option>${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+          <select class="si" id="etaBAFilter" onchange="filterETALog()"><option value="all">All BAs</option>${visibleAU().map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
           <select class="si" id="etaTypeFilter" onchange="filterETALog()">
             <option value="all">All changes</option>
             <option value="delayed">Delays only</option>
@@ -1867,7 +1888,7 @@ async function renderKPI(){
   const now=new Date();
   const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
   const {data:tasks}=await sb.from('tasks').select('*').gte('updated_at',ms);
-  const scores=AU.map(u=>calcKPI(u,tasks||[])).sort((a,b)=>b.total-a.total);
+  const scores=visibleAU().map(u=>calcKPI(u,tasks||[])).sort((a,b)=>b.total-a.total);
   el.innerHTML=`
     <div class="ph"><div class="pt">KPI scores</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})} · Quality 50pts · Timeliness 50pts</div></div>
     <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (50)</th><th>Timeliness (50)</th><th>Avg US/CR Days</th><th>Avg All Days</th><th>Rework%</th><th>At Risk</th><th>Total</th><th>Rating</th></tr></thead>
@@ -2182,15 +2203,18 @@ async function renderRoles(){
       ${AR.map(r=>{
         const perms=Array.isArray(r.permissions)?r.permissions:[];
         const userCount=AU.filter(u=>u.role_id===r.id).length;
+        const isLocked=r.is_manager===true||r.name?.toLowerCase()==='manager';
         return`<div class="role-row">
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">${r.name}${r.is_system?`<span style="font-size:9px;font-family:var(--mono);color:var(--text3);background:var(--surface3);padding:1px 5px;border-radius:3px">system</span>`:''}
+            <div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">${r.name}
+              ${r.is_system?`<span style="font-size:9px;font-family:var(--mono);color:var(--text3);background:var(--surface3);padding:1px 5px;border-radius:3px">system</span>`:''}
+              ${isLocked?`<span style="font-size:9px;font-family:var(--mono);color:var(--amber);background:var(--abg);padding:1px 5px;border-radius:3px">🔒 protected</span>`:''}
             </div>
             <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${perms.length} permissions · ${userCount} user${userCount!==1?'s':''}</div>
             <div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${perms.slice(0,6).map(p=>`<span style="font-size:9.5px;background:var(--surface3);color:var(--text3);padding:1px 5px;border-radius:3px">${p}</span>`).join('')}${perms.length>6?`<span style="font-size:9.5px;color:var(--text3)">+${perms.length-6} more</span>`:''}</div>
           </div>
-          <button class="btn btn-g btn-sm" onclick="openEditRole('${r.id}')">Edit</button>
-          ${!r.is_system?`<button class="btn btn-d btn-sm" onclick="delRole('${r.id}','${r.name}')">Delete</button>`:''}
+          ${!isLocked?`<button class="btn btn-g btn-sm" onclick="openEditRole('${r.id}')">Edit</button>`:`<button class="btn btn-sm" disabled style="opacity:.4;cursor:not-allowed">Edit</button>`}
+          ${(!r.is_system&&!isLocked)?`<button class="btn btn-d btn-sm" onclick="delRole('${r.id}','${r.name}')">Delete</button>`:''}
         </div>`;
       }).join('')}
     </div>`;
@@ -2378,9 +2402,12 @@ async function deleteLeave(leaveId, baName){
 }
 
 function openAddUser(){
+  document.getElementById('uId').value='';
   document.getElementById('userModalTitle').textContent='Add member';
   ['uName','uEmail','uPin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pinHint').textContent='Required for new accounts';
+  document.getElementById('uHideFromNonMgr').checked=false;
+  document.getElementById('hideToggleFF').style.display='none';
   fillRoleSel('');OM('userModal');
 }
 
@@ -2392,6 +2419,9 @@ function openEditUser(id){
   document.getElementById('uEmail').value=u.email;
   document.getElementById('uPin').value='';
   document.getElementById('pinHint').textContent='Leave blank to keep current PIN';
+  document.getElementById('uHideFromNonMgr').checked=!!u.hide_from_non_managers;
+  const roleIsManager=isManagerRole(u.role_id);
+  document.getElementById('hideToggleFF').style.display=roleIsManager?'block':'none';
   fillRoleSel(u.role_id);OM('userModal');
 }
 
@@ -2405,16 +2435,17 @@ async function saveUser(){
   const email=document.getElementById('uEmail').value.trim().toLowerCase();
   const pin=document.getElementById('uPin').value.trim();
   const roleId=document.getElementById('uRoleId').value;
+  const hideFromNonMgr=document.getElementById('uHideFromNonMgr').checked;
   if(!name||!email){showToast('Name and email required','error');return;}
   if(!id&&(pin.length!==4||!/^\d{4}$/.test(pin))){showToast('4-digit PIN required','error');return;}
   if(id){
-    const upd={name,email,role_id:roleId};
+    const upd={name,email,role_id:roleId,hide_from_non_managers:hideFromNonMgr};
     if(pin.length===4)upd.pin_hash=pin;
     await sb.from('users').update(upd).eq('id',id);
     if(CU.id===id){CU={...CU,...upd};sessionStorage.setItem('ba_user',JSON.stringify(CU));}
     showToast('Updated','success');
   }else{
-    await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,role:'ba'});
+    await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,role:'ba',hide_from_non_managers:false});
     showToast('Member added','success');
   }
   CM('userModal');await loadBase();renderAdmin();
@@ -2602,7 +2633,7 @@ async function renderAnalytics() {
       <input type="date" class="si" id="drTo" value="${defTo}" onchange="applyCustomRange()">
       <select class="si" id="baSel" onchange="refreshAnalytics()" style="min-width:120px">
         <option value="all">All BAs</option>
-        ${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+        ${visibleAU().map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
       </select>
     </div>
     <div id="analyticsBody"></div>`;
@@ -2646,7 +2677,7 @@ function refreshAnalytics() {
   const allT = window._analyticsData || [];
   const fromD = new Date(from), toD = new Date(to + 'T23:59:59');
   // Filter by date range (use updated_at for completion, created_at for creation)
-  let members = baId === 'all' ? AU : AU.filter(u => u.id === baId);
+  let members = baId === 'all' ? visibleAU() : visibleAU().filter(u => u.id === baId);
   const filtered = allT.filter(t => {
     const d = new Date(t.updated_at || t.created_at);
     return d >= fromD && d <= toD;
