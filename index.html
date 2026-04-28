@@ -1714,22 +1714,126 @@ function filterAT(){
 async function renderAuditLog(){
   const el=document.getElementById('pageAuditLog');
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
-  const {data:audit}=await sb.from('task_audit').select('*,tasks(project_name,description)').order('changed_at',{ascending:false}).limit(300);
-  const entries=audit||[];
+  const [auditRes, tasksRes] = await Promise.all([
+    sb.from('task_audit').select('*,tasks(project_name,description,ba_id)').order('changed_at',{ascending:false}).limit(500),
+    sb.from('tasks').select('id,description,project_name,ba_id,eta_edit_count').order('eta_edit_count',{ascending:false})
+  ]);
+  const entries=auditRes.data||[];
+  const tasks=tasksRes.data||[];
   const fc={delayed:0,expedited:0,rework:0};
   entries.forEach(e=>{if(fc[e.flag_type]!==undefined)fc[e.flag_type]++;});
+
+  // ETA change entries only
+  const etaEntries=entries.filter(e=>e.field_name==='eta'&&['delayed','expedited','edited','leave_adjustment'].includes(e.flag_type));
+  const delays=etaEntries.filter(e=>e.flag_type==='delayed');
+  const avgDelay=delays.length&&delays.some(e=>e.days_delta)?Math.round(delays.filter(e=>e.days_delta).reduce((s,e)=>s+e.days_delta,0)/delays.filter(e=>e.days_delta).length):null;
+
+  // Per-BA ETA summary
+  const baEtaSummary=AU.map(u=>{
+    const baEta=etaEntries.filter(e=>e.ba_id===u.id&&e.flag_type!=='leave_adjustment');
+    const baDelays=baEta.filter(e=>e.flag_type==='delayed');
+    const baExp=baEta.filter(e=>e.flag_type==='expedited');
+    const baAvgDelta=baDelays.length&&baDelays.some(e=>e.days_delta)?Math.round(baDelays.filter(e=>e.days_delta).reduce((s,e)=>s+e.days_delta,0)/baDelays.filter(e=>e.days_delta).length):null;
+    const topTask=tasks.filter(t=>t.ba_id===u.id&&t.eta_edit_count>0).sort((a,b)=>b.eta_edit_count-a.eta_edit_count)[0];
+    return{id:u.id,name:u.name,total:baEta.length,delays:baDelays.length,expedited:baExp.length,avgDelta:baAvgDelta,topTask};
+  }).filter(s=>s.total>0).sort((a,b)=>b.delays-a.delays);
+
   el.innerHTML=`
     <div class="ph"><div class="pt">Audit log</div><div class="ps">All task changes — ETA shifts, status updates, reworks</div></div>
     <div class="mrow">
       <div class="mc al"><div class="mv">${fc.delayed}</div><div class="ml">ETA delays</div></div>
       <div class="mc gd"><div class="mv">${fc.expedited}</div><div class="ml">Brought forward</div></div>
       <div class="mc wn"><div class="mv">${fc.rework}</div><div class="ml">Reworks</div></div>
+      <div class="mc" style="background:var(--surface2)"><div class="mv" style="font-size:18px">${avgDelay!=null?'+'+avgDelay+'d':'—'}</div><div class="ml">Avg delay (days)</div></div>
     </div>
-    <div class="card">
-      <div class="ar">${['all','delayed','expedited','status_change','rework','created'].map(f=>`<button class="fc ${f==='all'?'active':''}" onclick="filterAL(this,'${f}')">${f.replace('_',' ')}</button>`).join('')}</div>
-      <div id="alEntries">${buildAL(entries,'all')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:.75rem;flex-wrap:wrap">
+      <button class="fc active" onclick="switchALTab(this,'log')">Activity log</button>
+      <button class="fc" onclick="switchALTab(this,'eta')">ETA change frequency</button>
+    </div>
+
+    <div id="alTabLog">
+      <div class="card">
+        <div class="ar">${['all','delayed','expedited','status_change','rework','created','leave_adjustment'].map(f=>`<button class="fc ${f==='all'?'active':''}" onclick="filterAL(this,'${f}')">${f.replace(/_/g,' ')}</button>`).join('')}</div>
+        <div id="alEntries">${buildAL(entries,'all')}</div>
+      </div>
+    </div>
+
+    <div id="alTabEta" style="display:none">
+      <div class="card" style="margin-bottom:1rem">
+        <div class="ct">ETA change frequency — per BA</div>
+        <div class="fhint" style="margin-bottom:.75rem">Manual ETA changes only — leave adjustments are excluded. Sorted by number of delays.</div>
+        ${baEtaSummary.length?`<div class="tw"><table><thead><tr>
+          <th>BA</th><th>Total ETA changes</th><th>Delays</th><th>Brought forward</th><th>Avg delay (days)</th><th>Most edited task</th>
+        </tr></thead><tbody>
+        ${baEtaSummary.map(s=>`<tr>
+          <td style="font-weight:500">${s.name}</td>
+          <td style="font-family:var(--mono);font-size:11px;text-align:center">${s.total}</td>
+          <td style="font-family:var(--mono);font-size:11px;text-align:center;color:${s.delays>3?'var(--red)':s.delays>1?'var(--amber)':'var(--text2)'}">${s.delays}</td>
+          <td style="font-family:var(--mono);font-size:11px;text-align:center;color:var(--green)">${s.expedited}</td>
+          <td style="font-family:var(--mono);font-size:11px;text-align:center;color:${s.avgDelta==null?'var(--text3)':s.avgDelta>7?'var(--red)':s.avgDelta>3?'var(--amber)':'var(--text2)'}">${s.avgDelta!=null?'+'+s.avgDelta+'d':'—'}</td>
+          <td style="font-size:11px;color:var(--text2)">${s.topTask?`${s.topTask.project_name}: ${s.topTask.description} <span style="background:var(--abg);color:var(--amber);font-size:9px;font-weight:700;padding:1px 4px;border-radius:6px">✎${s.topTask.eta_edit_count}</span>`:'—'}</td>
+        </tr>`).join('')}
+        </tbody></table></div>`:`<div class="es">No manual ETA changes recorded yet.</div>`}
+      </div>
+
+      <div class="card">
+        <div class="ct">ETA change history — detail</div>
+        <div class="ar" style="margin-bottom:.75rem">
+          <select class="si" id="etaBAFilter" onchange="filterETALog()"><option value="all">All BAs</option>${AU.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+          <select class="si" id="etaTypeFilter" onchange="filterETALog()">
+            <option value="all">All changes</option>
+            <option value="delayed">Delays only</option>
+            <option value="expedited">Brought forward only</option>
+          </select>
+        </div>
+        <div id="etaLogEntries">${buildETALog(etaEntries.filter(e=>e.flag_type!=='leave_adjustment'),'all','all')}</div>
+      </div>
     </div>`;
   window._al=entries;
+  window._etaEntries=etaEntries.filter(e=>e.flag_type!=='leave_adjustment');
+}
+
+function switchALTab(btn,tab){
+  document.querySelectorAll('#pageAuditLog .fc[onclick^="switchALTab"]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('alTabLog').style.display=tab==='log'?'':'none';
+  document.getElementById('alTabEta').style.display=tab==='eta'?'':'none';
+}
+
+function filterETALog(){
+  const baId=document.getElementById('etaBAFilter').value;
+  const type=document.getElementById('etaTypeFilter').value;
+  document.getElementById('etaLogEntries').innerHTML=buildETALog(window._etaEntries,baId,type);
+}
+
+function buildETALog(entries,baId,type){
+  let f=entries;
+  if(baId!=='all') f=f.filter(e=>e.ba_id===baId);
+  if(type!=='all') f=f.filter(e=>e.flag_type===type);
+  if(!f.length) return`<div class="es">No ETA changes for this filter.</div>`;
+  return f.map(e=>{
+    const task=e.tasks||{};
+    const isDelay=e.flag_type==='delayed';
+    const isExp=e.flag_type==='expedited';
+    const badge=isDelay?`<span style="background:var(--rbg);color:var(--red);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">DELAYED +${e.days_delta||'?'}d</span>`:isExp?`<span style="background:var(--gbg);color:var(--green);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">EARLIER ${e.days_delta||'?'}d</span>`:`<span style="background:var(--surface2);color:var(--text3);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px">EDITED</span>`;
+    const baName=AU.find(u=>u.id===e.ba_id)?.name||e.changed_by_name||'?';
+    const when=new Date(e.changed_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return`<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px">
+        <span style="font-size:12px;font-weight:500">${baName}</span>
+        ${badge}
+        <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono)">${when}</span>
+        <span style="font-size:10px;color:var(--text3)">by ${e.changed_by_name}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:2px">📁 ${task.project_name||'?'} — ${task.description||''}</div>
+      <div style="display:flex;gap:6px;align-items:center;font-size:11px;font-family:var(--mono)">
+        <span style="color:var(--red);text-decoration:line-through">${e.old_value||'—'}</span>
+        <span style="color:var(--text3)">→</span>
+        <span style="color:var(--green)">${e.new_value||'—'}</span>
+      </div>
+      ${e.reason?`<div style="font-size:10.5px;color:var(--accent);margin-top:3px">💬 "${e.reason}"</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 function filterAL(btn,f){
@@ -1926,7 +2030,7 @@ const IMP_GUIDES = {
   },
   tasks:{
     required:['BA Name','Project Name','Task Type','Description','Status'],
-    optional:['ETA (DD/MM/YYYY)','Review Result','Remarks'],
+    optional:['ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)','Remarks'],
     statuses:TASK_STATUSES,
     taskTypes:TASK_TYPES,
     notes:['BA Name must match an existing user (case-insensitive)','ETA format must be DD/MM/YYYY','Task Type must match exactly']
@@ -1977,7 +2081,7 @@ function previewImport(data){
   });
   importRows=validated;
   const ok=validated.filter(r=>r._ok).length,bad=validated.filter(r=>!r._ok).length;
-  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)'];
+  const cols=importType==='projects'?['Project Name','Status','Assigned BA Name','Project Manager','Business Owner']:['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)'];
   document.getElementById('impPreview').innerHTML=`
     <div style="margin-bottom:.5rem;font-size:12px">
       <span style="color:var(--green)">${ok} valid rows</span> · <span style="color:var(--red)">${bad} errors</span> · ${validated.length} total
@@ -2014,24 +2118,22 @@ async function confirmImport(){
       if(!ba)continue;
       const proj=AP.find(p=>p.name.toLowerCase()===row['Project Name'].toLowerCase());
       const rawEta=row['ETA (DD/MM/YYYY)'];
-      let eta=null;
-      if(rawEta){
-        // Handle Excel date serial number (e.g. 46133)
-        if(typeof rawEta==='number'||(/^\d{5}$/.test(String(rawEta)))){
-          const d=new Date(Math.round((Number(rawEta)-25569)*86400*1000));
-          eta=d.toISOString().split('T')[0];
-        } else {
-          const s=String(rawEta).trim();
-          // Handle DD/MM/YYYY format → convert to YYYY-MM-DD for Supabase
-          const dmyMatch=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-          if(dmyMatch){
-            eta=`${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
-          } else {
-            eta=s||null;
-          }
+      const rawStart=row['Start Date (DD/MM/YYYY)'];
+      let eta=null, startDate=null;
+      const parseDate=raw=>{
+        if(!raw) return null;
+        if(typeof raw==='number'||(/^\d{5}$/.test(String(raw)))){
+          const d=new Date(Math.round((Number(raw)-25569)*86400*1000));
+          return d.toISOString().split('T')[0];
         }
-      }
-      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,status:row['Status']||'To Do',review_result:row['Review Result']||null,remarks:row['Remarks']||null}).select().single();
+        const s=String(raw).trim();
+        const dmyMatch=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if(dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
+        return s||null;
+      };
+      eta=parseDate(rawEta);
+      startDate=parseDate(rawStart);
+      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,start_date:startDate,status:row['Status']||'To Do',remarks:row['Remarks']||null,rework_count:0,eta_edit_count:0,total_paused_days:0}).select().single();
       if(!error){await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;}
     }
   }
@@ -2044,23 +2146,23 @@ async function confirmImport(){
 function dlTemplate(){
   const headers=importType==='projects'
     ?['Project Name','Status','Assigned BA Name','Secondary BA Name','Supervising BA Name','Project Manager','Business Owner','Jira URL','Description']
-    :['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Review Result','Remarks'];
+    :['BA Name','Project Name','Task Type','Description','Status','ETA (DD/MM/YYYY)','Start Date (DD/MM/YYYY)','Remarks'];
   const sample=importType==='projects'
     ?[['JMYR Admin Portal','In Progress','Syafawati','','Shahidah','PM Name','Business Owner','https://jira.myeg.com.my/...','Portal description']]
-    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','In Progress','10/05/2026','','Notes here']];
+    :[['Syafawati','JMYR Admin Portal','User Story Doc','Hosted checkout page','To Do','10/05/2026','01/05/2026','Notes here']];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([headers,...sample]);
   ws['!cols']=headers.map(()=>({wch:22}));
   // Force ETA column (index 5) to text format to prevent Excel converting to date serial
   if(importType==='tasks'){
-    const etaColIdx=5;
+    const etaColIdx=5, startColIdx=6;
     for(let r=1;r<=sample.length;r++){
-      const cellAddr=XLSX.utils.encode_cell({r,c:etaColIdx});
-      if(ws[cellAddr]){ws[cellAddr].t='s';ws[cellAddr].z='@';}
+      [etaColIdx,startColIdx].forEach(ci=>{
+        const cellAddr=XLSX.utils.encode_cell({r,c:ci});
+        if(ws[cellAddr]){ws[cellAddr].t='s';ws[cellAddr].z='@';}
+      });
     }
   }
-  XLSX.utils.book_append_sheet(wb,ws,'Template');
-  XLSX.writeFile(wb,`import_template_${importType}.xlsx`);
   XLSX.utils.book_append_sheet(wb,ws,'Template');
   XLSX.writeFile(wb,`import_template_${importType}.xlsx`);
 }
