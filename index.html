@@ -2080,9 +2080,9 @@ function handleFile(file){
   if(!file||!file.name.endsWith('.xlsx')){showToast('Please upload an .xlsx file','error');return;}
   const reader=new FileReader();
   reader.onload=e=>{
-    const wb=XLSX.read(e.target.result,{type:'binary'});
+    const wb=XLSX.read(e.target.result,{type:'binary',cellDates:true,dateNF:'dd/mm/yyyy'});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const data=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const data=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false,dateNF:'dd/mm/yyyy'});
     if(!data.length){showToast('No data found in file','error');return;}
     previewImport(data);
   };
@@ -2143,18 +2143,34 @@ async function confirmImport(){
       let eta=null, startDate=null;
       const parseDate=raw=>{
         if(!raw) return null;
-        if(typeof raw==='number'||(/^\d{5}$/.test(String(raw)))){
-          const d=new Date(Math.round((Number(raw)-25569)*86400*1000));
-          return d.toISOString().split('T')[0];
+        // Already a JS Date object
+        if(raw instanceof Date){
+          if(isNaN(raw)) return null;
+          return raw.toISOString().split('T')[0];
+        }
+        // Excel serial number
+        if(typeof raw==='number'){
+          const d=new Date(Math.round((raw-25569)*86400*1000));
+          return isNaN(d)?null:d.toISOString().split('T')[0];
         }
         const s=String(raw).trim();
-        const dmyMatch=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if(dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
-        return s||null;
+        if(!s) return null;
+        // DD/MM/YYYY — from template or manual entry
+        const dmy=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if(dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+        // YYYY-MM-DD — already ISO
+        if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        // MM/DD/YYYY fallback
+        const mdy=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if(mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`;
+        return null;
       };
       eta=parseDate(rawEta);
       startDate=parseDate(rawStart);
-      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,start_date:startDate,status:row['Status']||'To Do',remarks:row['Remarks']||null,rework_count:0,eta_edit_count:0,total_paused_days:0}).select().single();
+      const VALID_PRIORITIES=['Very High','High','Medium','Low'];
+      const rawPriority=String(row['Priority']||'').trim();
+      const priority=VALID_PRIORITIES.includes(rawPriority)?rawPriority:'Medium';
+      const {data:nt,error}=await sb.from('tasks').insert({ba_id:ba.id,project_id:proj?.id||null,project_name:row['Project Name'],task_type:row['Task Type'],description:row['Description'],eta,start_date:startDate,status:row['Status']||'To Do',priority,remarks:row['Remarks']||null,rework_count:0,eta_edit_count:0,total_paused_days:0}).select().single();
       if(!error){await logA(nt.id,ba.id,'created','',nt.status,'created',null);imported++;}
     }
   }
