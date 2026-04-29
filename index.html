@@ -1135,14 +1135,17 @@ function promptNewETA(tid,t,ns,etaMissing,etaPast){
     </div>
     <div class="mf">
       <button class="btn btn-g" onclick="document.getElementById('_etaPromptMo')?.remove();refreshPage()">Cancel</button>
-      <button class="btn btn-a" onclick="confirmNewETA('${tid}',${JSON.stringify(t).replace(/'/g,"&#39;")})">▶ Start task</button>
+      <button class="btn btn-a" onclick="confirmNewETA()">▶ Start task</button>
     </div>
   </div>`;
   document.body.appendChild(mo);
   window._pendingEtaTask={tid,t,ns};
 }
 
-async function confirmNewETA(tid,t){
+async function confirmNewETA(){
+  // Read task context from window store — avoids passing complex objects via onclick attributes
+  const {tid, t} = window._pendingEtaTask || {};
+  if(!tid || !t){ showToast('Session error — please try again','error'); return; }
   const newEta=document.getElementById('newEtaInput')?.value;
   const reason=document.getElementById('newEtaReason')?.value?.trim();
   if(!newEta){showToast('Please select an ETA date','error');return;}
@@ -1159,7 +1162,7 @@ async function confirmNewETA(tid,t){
     await sb.from('tasks').update({eta:newEta,eta_edit_count:editCount,updated_at:new Date().toISOString()}).eq('id',tid);
     await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,reason);
   }
-  // Always log the reason as a status-linked audit entry
+  // Apply status change with reason recorded in audit
   await _applySetStat(tid,{...t,eta:newEta},'In Progress',reason);
 }
 
