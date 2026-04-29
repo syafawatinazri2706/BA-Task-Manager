@@ -138,7 +138,9 @@ tr:hover td{background:rgba(255,255,255,.012)}
 .fr2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .fhint{font-size:10px;color:var(--text3);margin-top:2px}
 /* WORKLOAD */
-.wlrow{margin-bottom:9px}
+.wlrow{margin-bottom:9px;cursor:pointer;border-radius:var(--rs);padding:4px 6px;margin-left:-6px;margin-right:-6px;transition:background var(--t)}
+.wlrow:hover{background:var(--surface2)}
+.wl-ba-tasks{margin-top:8px;display:none;background:var(--surface2);border-radius:var(--rs);padding:.75rem;border:1px solid var(--border)}
 .wln{font-size:12px;font-weight:500;margin-bottom:3px;display:flex;align-items:center;justify-content:space-between}
 .wlbg{height:9px;background:var(--surface3);border-radius:5px;overflow:hidden}
 .wlfill{height:100%;border-radius:5px;transition:width .5s}
@@ -201,10 +203,24 @@ tr:hover td{background:rgba(255,255,255,.012)}
 .sb2.s-done{background:rgba(62,207,142,.08);color:#2ea870}
 .sb2.s-cancelled{background:var(--rbg);color:var(--red)}
 .es{text-align:center;padding:2.5rem 1rem;color:var(--text3)}
-#toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px 13px;font-size:12px;transform:translateY(20px);opacity:0;transition:all .2s;pointer-events:none;max-width:270px}
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:8px 13px;font-size:12px;transform:translateY(20px);opacity:0;transition:all .2s;pointer-events:none;max-width:420px;line-height:1.4}
 #toast.show{transform:translateY(0);opacity:1}
 #toast.success{border-color:var(--green);color:var(--green)}
 #toast.error{border-color:var(--red);color:var(--red)}
+.notif-card{pointer-events:all;display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:var(--r);border:1px solid;font-size:12px;line-height:1.45;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,.35);animation:notifIn .22s ease;cursor:default;position:relative}
+.notif-card.success{background:rgba(62,207,142,.08);border-color:rgba(62,207,142,.35);color:var(--green)}
+.notif-card.error{background:rgba(245,101,101,.08);border-color:rgba(245,101,101,.35);color:var(--red)}
+.notif-card.info{background:rgba(77,166,255,.08);border-color:rgba(77,166,255,.35);color:var(--blue)}
+.notif-card.warning{background:rgba(246,166,35,.08);border-color:rgba(246,166,35,.35);color:var(--amber)}
+.notif-icon{font-size:15px;flex-shrink:0;margin-top:1px}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-weight:600;font-size:12px;margin-bottom:2px}
+.notif-msg{font-size:11px;opacity:.85;word-break:break-word}
+.notif-close{background:none;border:none;color:inherit;opacity:.5;cursor:pointer;font-size:14px;padding:0 0 0 6px;flex-shrink:0;line-height:1}
+.notif-close:hover{opacity:1}
+.notif-bar{position:absolute;bottom:0;left:0;height:2px;border-radius:0 0 var(--r) var(--r);background:currentColor;opacity:.3;animation:notifBar linear forwards}
+@keyframes notifIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes notifBar{from{width:100%}to{width:0%}}
 .sp{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 .lov{display:flex;align-items:center;justify-content:center;padding:2.5rem}
@@ -213,6 +229,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
 .fp{display:inline-flex;padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:600;font-family:var(--mono)}
 .fpl{background:var(--rbg);color:var(--red)}
 .fpe{background:var(--gbg);color:var(--green)}
+.fpd{background:var(--abg);color:var(--amber)}
 .divl{border:none;border-top:1px solid var(--border);margin:.85rem 0}
 .user-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
 .user-row:last-child{border-bottom:none}
@@ -458,6 +475,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
 </div>
 
 <div id="toast"></div>
+<div id="notifStack" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none"></div>
 
 <script>
 // ══════════════════════════════════
@@ -471,7 +489,75 @@ let GEMINI_KEY = localStorage.getItem('gemini_api_key') || '';
 let OPENAI_KEY = localStorage.getItem('openai_api_key') || '';
 let CUSTOM_AI_URL = localStorage.getItem('custom_ai_url') || '';
 let CUSTOM_AI_KEY = localStorage.getItem('custom_ai_key') || '';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Supabase error interceptor ──
+// Wraps every .from() query so any error is shown as a toast + logged to console.
+// No need to add error handling to each individual call.
+function wrapSbQuery(q, context){
+  const originalThen = q.then.bind(q);
+  q.then = function(onFulfilled, onRejected){
+    return originalThen(res => {
+      if(res?.error){
+        const msg = res.error.message || 'Unknown database error';
+        console.error(`[Supabase error] ${context}:`, res.error);
+        // Show toast only for mutations (insert/update/delete), not reads
+        if(context && /insert|update|delete|upsert/i.test(context)){
+          showSbError(msg, context);
+        }
+      }
+      return onFulfilled ? onFulfilled(res) : res;
+    }, onRejected);
+  };
+  return q;
+}
+
+let _sbErrorShownAt = 0;
+function showSbError(msg, context){
+  const now = Date.now();
+  if(now - _sbErrorShownAt < 3000) return; // debounce — don't spam toasts
+  _sbErrorShownAt = now;
+  const label = context ? `DB error (${context})` : 'Database error';
+  // Check for common known issues and give helpful hints
+  let hint = '';
+  if(msg.includes('column') && msg.includes('does not exist')){
+    const col = msg.match(/column ["']?(\w+)["']? of/)?.[1] || msg.match(/column (\w+)/)?.[1] || '';
+    hint = col ? ` — run in Supabase SQL Editor: ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ${col} TEXT;` : ' — a column is missing in Supabase. Check SQL migrations.';
+  } else if(msg.includes('violates') && msg.includes('not-null')){
+    hint = ' — a required field is empty.';
+  } else if(msg.includes('JWT') || msg.includes('auth')){
+    hint = ' — session may have expired. Try refreshing the page.';
+  } else if(msg.includes('relation') && msg.includes('does not exist')){
+    hint = ' — a table is missing in Supabase. Re-run the schema SQL.';
+  } else if(msg.includes('network') || msg.includes('fetch')){
+    hint = ' — check your internet connection.';
+  }
+  showToast(`⚠ ${label}: ${msg}${hint}`, 'error', 8000);
+  notify(label, msg+hint, 'error', 0); // persistent until dismissed
+}
+
+const _rawSb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = new Proxy(_rawSb, {
+  get(target, prop){
+    if(prop === 'from'){
+      return function(table){
+        const qb = target.from(table);
+        return new Proxy(qb, {
+          get(qTarget, method){
+            if(['select','insert','update','upsert','delete'].includes(method)){
+              return function(...args){
+                const q = qTarget[method](...args);
+                return wrapSbQuery(q, `${method} ${table}`);
+              };
+            }
+            return typeof qTarget[method] === 'function' ? qTarget[method].bind(qTarget) : qTarget[method];
+          }
+        });
+      };
+    }
+    const val = target[prop];
+    return typeof val === 'function' ? val.bind(target) : val;
+  }
+});
 
 // ══════════════════════════════════
 // STATE
@@ -733,8 +819,21 @@ function navigateTo(page) {
 // ══════════════════════════════════
 function INI(name) { return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
 function OD(eta,status) {
-  if (!eta||['Completed','Cancelled'].includes(status)) return false;
+  // LATE only applies to In Progress tasks past their ETA
+  if (!eta||status!=='In Progress') return false;
   return new Date(eta) < new Date(new Date().toDateString());
+}
+function isAlmostDue(eta,status){
+  // DUE SOON = In Progress only, ETA is exactly tomorrow (1 day before)
+  if(!eta||status!=='In Progress') return false;
+  const etaD=new Date(eta); const today=new Date(new Date().toDateString());
+  const diff=(etaD-today)/86400000;
+  return diff>=0&&diff<=1;
+}
+function isStartDateAlert(task){
+  // To Do alert: start_date is set and has passed (task hasn't started yet)
+  if(!task.start_date||task.status!=='To Do') return false;
+  return new Date(task.start_date) < new Date(new Date().toDateString());
 }
 function DD(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
 
@@ -770,10 +869,22 @@ function workingDays(dateA, dateB, baId){
   }
   return count;
 }
+// Resolve actual start (first In Progress) and actual end (first Completed) from audit log.
+// Falls back to task.created_at / task.updated_at when audit entries are absent.
+function getTaskActualDates(task, auditEntries){
+  const ta = (auditEntries||[]).filter(e=>e.task_id===task.id && e.field_name==='status');
+  const ipEntry  = ta.slice().sort((a,b)=>new Date(a.changed_at)-new Date(b.changed_at)).find(e=>e.new_value==='In Progress');
+  const doneEntry= ta.slice().sort((a,b)=>new Date(a.changed_at)-new Date(b.changed_at)).find(e=>e.new_value==='Completed');
+  const actualStart = ipEntry   ? ipEntry.changed_at   : (task.start_date||task.created_at);
+  const actualEnd   = doneEntry ? doneEntry.changed_at : task.updated_at;
+  return { actualStart, actualEnd };
+}
 function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Review':'s-review','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
 function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
 function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
 function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)).reduce((s,t)=>s+(getWeight(t.task_type)*getPriorityMultiplier(t.priority||'Medium')),0); }
+// Tasks counted in workload display — excludes Completed, Cancelled, On Hold
+function wlActiveTasks(tasks){ return tasks.filter(t=>!['Completed','Cancelled','On Hold'].includes(t.status)); }
 function getWeight(type){ return parseInt(WS['weight_'+type.toLowerCase().replace(/[^a-z]/g,'_')]||WS['weight_default']||W_WEIGHTS[type]||W_DEFAULT); }
 function wlStatus(score){
   const gm = parseInt(WS.green_max||14), am = parseInt(WS.amber_max||25);
@@ -830,15 +941,67 @@ async function renderMyTasks() {
       <div class="mc al"><div class="mv">${od}</div><div class="ml">Overdue</div></div>
     </div>
     <div class="card">
-      <div class="ar" id="mtFilters">${['All',...TASK_STATUSES].map((s,i)=>`<button class="fc ${i===0?'active':''}" onclick="filterMT(this,'${s}')">${s}</button>`).join('')}</div>
-      <div id="mtTable">${buildTT(T,'All',CU.id,true)}</div>
+      <div id="mtFilters">
+        <div class="ar" style="margin-bottom:6px">
+          ${['All',...TASK_STATUSES].map((s,i)=>`<button class="fc ${i===0?'active':''}" data-mt-status="${s}" onclick="applyMTFilters()">${s}</button>`).join('')}
+        </div>
+        <div class="ar" style="margin-bottom:.85rem;gap:6px">
+          <span style="font-size:10.5px;color:var(--text3);font-weight:500;align-self:center">ETA</span>
+          <input type="date" class="si" id="mtEtaFrom" placeholder="From" style="width:130px" onchange="applyMTFilters()">
+          <span style="font-size:11px;color:var(--text3);align-self:center">→</span>
+          <input type="date" class="si" id="mtEtaTo" placeholder="To" style="width:130px" onchange="applyMTFilters()">
+          <button class="fc" id="mtLateBtn" onclick="toggleMTFlag('late')" title="Show only LATE tasks (In Progress past ETA)">🔴 Late</button>
+          <button class="fc" id="mtDueSoonBtn" onclick="toggleMTFlag('soon')" title="Show only In Progress tasks due tomorrow (1 day before ETA)">🟡 Due soon</button>
+          <button class="btn btn-g btn-sm" onclick="clearMTFilters()">Clear filters</button>
+        </div>
+      </div>
+      <div id="mtTable"></div>
     </div>`;
   window._myTasks = T;
+  window._mtFlags = {late:false,soon:false};
+  applyMTFilters();
 }
 
-function filterMT(btn,s){
-  document.querySelectorAll('#mtFilters .fc').forEach(c=>c.classList.remove('active')); btn.classList.add('active');
-  document.getElementById('mtTable').innerHTML = buildTT(s==='All'?window._myTasks:window._myTasks.filter(t=>t.status===s),'all',CU.id,true);
+function toggleMTFlag(flag){
+  if(!window._mtFlags) window._mtFlags={late:false,soon:false};
+  window._mtFlags[flag]=!window._mtFlags[flag];
+  document.getElementById('mtLateBtn')?.classList.toggle('active', window._mtFlags.late);
+  document.getElementById('mtDueSoonBtn')?.classList.toggle('active', window._mtFlags.soon);
+  applyMTFilters();
+}
+
+function clearMTFilters(){
+  document.querySelectorAll('#mtFilters .fc[data-mt-status]').forEach(b=>b.classList.toggle('active',b.dataset.mtStatus==='All'));
+  const fe=document.getElementById('mtEtaFrom'),te=document.getElementById('mtEtaTo');
+  if(fe)fe.value='';if(te)te.value='';
+  window._mtFlags={late:false,soon:false};
+  document.getElementById('mtLateBtn')?.classList.remove('active');
+  document.getElementById('mtDueSoonBtn')?.classList.remove('active');
+  applyMTFilters();
+}
+
+function applyMTFilters(){
+  const T=window._myTasks||[];
+  const flags=window._mtFlags||{late:false,soon:false};
+  // Status
+  const activeStatusBtn=document.querySelector('#mtFilters .fc[data-mt-status].active');
+  const selStatus=activeStatusBtn?.dataset.mtStatus||'All';
+  // Deactivate all status btns, activate clicked one (handle via onclick delegation)
+  document.querySelectorAll('#mtFilters .fc[data-mt-status]').forEach(b=>{
+    b.classList.toggle('active',b.dataset.mtStatus===selStatus);
+  });
+  // Date range
+  const from=document.getElementById('mtEtaFrom')?.value||'';
+  const to=document.getElementById('mtEtaTo')?.value||'';
+  const f=T.filter(t=>{
+    if(selStatus!=='All'&&t.status!==selStatus)return false;
+    if(from&&(t.eta||'')&&t.eta<from)return false;
+    if(to&&(t.eta||'')&&t.eta>to)return false;
+    if(flags.late&&!OD(t.eta,t.status))return false;
+    if(flags.soon&&!isAlmostDue(t.eta,t.status))return false;
+    return true;
+  });
+  document.getElementById('mtTable').innerHTML=buildTT(f,'All',CU.id,true);
 }
 
 function buildTT(tasks,filter,baId,canEdit) {
@@ -847,7 +1010,10 @@ function buildTT(tasks,filter,baId,canEdit) {
   const canOverride = can('override_completed_task');
   const rows = tasks.map(t=>{
     const od=OD(t.eta,t.status);
-    const isLocked = t.status==='Completed' && !window._overrideIds?.has(t.id);
+    const almostDue=isAlmostDue(t.eta,t.status);
+    const startAlert=isStartDateAlert(t);
+    // Lock Completed AND Cancelled unless overridden
+    const isLocked = ['Completed','Cancelled'].includes(t.status) && !window._overrideIds?.has(t.id);
     const ba = baId==='all' ? `<td style="font-size:10.5px;color:var(--accent);font-weight:600">${AU.find(u=>u.id===t.ba_id)?.name||'?'}</td>` : '';
     const canEditThis = canEdit&&!isLocked&&(can('edit_task_any')||t.ba_id===CU.id);
     const edit = canEditThis ? `<button class="bic" onclick="openEditTask('${t.id}')" title="Edit">✎</button>` : '';
@@ -859,14 +1025,15 @@ function buildTT(tasks,filter,baId,canEdit) {
     const reworkBadge = canMetrics && t.rework_count > 0 ? `<span style="background:var(--rbg);color:var(--red);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px">↩${t.rework_count}</span>` : '';
     const proofLink = t.proof_url ? `<a href="${t.proof_url}" target="_blank" title="View proof doc" style="color:var(--green);font-size:11px;text-decoration:none">📄</a>` : '';
     // Status cell — dropdown for editable, badge for locked/readonly
+    const lockedBadgeCls = t.status==='Completed'?'b-done':'b-cancelled';
     const statusCell = isLocked
-      ? `<td><span class="badge b-done">Completed</span>${lockBadge}</td>`
+      ? `<td><span class="badge ${lockedBadgeCls}">${t.status}</span>${lockBadge}</td>`
       : canEditThis
         ? `<td><select class="si" style="font-size:11px;padding:3px 6px" onchange="setStat('${t.id}',this.value)">${TASK_STATUSES.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></td>`
         : `<td><span class="badge ${SC(t.status)?'b-'+SC(t.status).replace('s-',''):''}" style="font-size:10px">${t.status}</span></td>`;
     return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
       ${ba}
-      <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}</td>
+      <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${almostDue&&!od?` <span class="fp fpd">DUE SOON</span>`:''}${startAlert?` <span class="fp" style="background:rgba(77,166,255,0.15);color:var(--blue)">START</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
@@ -904,15 +1071,90 @@ async function setStat(tid,ns){
     if(sel)sel.value=t.status;
     return;
   }
+  // When resuming from paused (On Hold/Pending/Review) → In Progress,
+  // check if ETA is missing or already past → prompt BA for a new ETA
+  const pausedStatuses=['Pending','Review','On Hold'];
+  if(pausedStatuses.includes(t.status)&&ns==='In Progress'){
+    const today=new Date(new Date().toDateString());
+    const etaMissing=!t.eta;
+    const etaPast=t.eta&&new Date(t.eta)<today;
+    if(etaMissing||etaPast){
+      // Show inline ETA prompt modal
+      await promptNewETA(tid,t,ns,etaMissing);
+      return;
+    }
+  }
+  await _applySetStat(tid,t,ns);
+}
+
+// Prompt the BA to input a new ETA when resuming to In Progress with stale/missing ETA
+function promptNewETA(tid,t,ns,etaMissing){
+  return new Promise(resolve=>{
+    const reason=etaMissing?'No ETA was set for this task.':'The ETA has already passed.';
+    const mo=document.createElement('div');
+    mo.className='mo open';
+    mo.innerHTML=`<div class="modal" style="width:420px">
+      <div class="mh"><span class="mtt">📅 New ETA required</span><button class="mx" onclick="this.closest('.mo').remove();resolve()">×</button></div>
+      <div class="mb">
+        <div style="font-size:12px;color:var(--amber);background:var(--abg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(246,166,35,.2)">
+          ⚠ ${reason} Please set a new ETA before resuming this task to <strong>In Progress</strong>.
+        </div>
+        <div class="ff">
+          <label class="flb">New ETA <span style="color:var(--red)">*</span></label>
+          <input type="date" class="finp" id="newEtaInput" min="${new Date().toISOString().split('T')[0]}">
+          <div class="fhint">Must be today or a future date</div>
+        </div>
+        <div class="ff">
+          <label class="flb">Reason <span style="color:var(--red)">*</span></label>
+          <textarea class="fta" id="newEtaReason" rows="2" placeholder="e.g. Task was on hold pending client input, resuming with revised timeline"></textarea>
+        </div>
+      </div>
+      <div class="mf">
+        <button class="btn btn-g" onclick="this.closest('.mo').remove()">Cancel</button>
+        <button class="btn btn-a" id="newEtaSaveBtn" onclick="confirmNewETA('${tid}',${JSON.stringify(t).replace(/'/g,"&#39;")})">Confirm &amp; Resume</button>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+    // store context for confirmNewETA
+    window._pendingEtaTask={tid,t,ns};
+    resolve();
+  });
+}
+
+async function confirmNewETA(tid,t){
+  const newEta=document.getElementById('newEtaInput')?.value;
+  const reason=document.getElementById('newEtaReason')?.value?.trim();
+  if(!newEta){showToast('Please select a new ETA date','error');return;}
+  if(!reason){showToast('Please provide a reason for the new ETA','error');return;}
+  const today=new Date(new Date().toDateString());
+  if(new Date(newEta)<today){showToast('ETA must be today or a future date','error');return;}
+  const mo=document.querySelector('.mo.open');
+  if(mo)mo.remove();
+  // Apply the ETA update + status change
+  const editCount=(t.eta_edit_count||0)+1;
+  const delta=t.eta?Math.round((new Date(newEta)-new Date(t.eta))/86400000):null;
+  const flag=delta===null?'edited':delta>0?'delayed':delta<0?'expedited':'edited';
+  await sb.from('tasks').update({eta:newEta,eta_edit_count:editCount,updated_at:new Date().toISOString()}).eq('id',tid);
+  await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,reason);
+  showToast(`ETA set to ${newEta}. Resuming task to In Progress.`,'info');
+  const ns='In Progress';
+  await _applySetStat(tid,{...t,eta:newEta},ns);
+}
+
+async function _applySetStat(tid,t,ns){
   let updates={status:ns,updated_at:new Date().toISOString()};
   // Silent rework tracking: Review → In Progress for US/CR
   if(DOC_TYPES.includes(t.task_type)&&t.status==='Review'&&ns==='In Progress'){
     updates.rework_count=(t.rework_count||0)+1;
   }
+  // Re-lock: moving to Completed or Cancelled revokes any override
+  if(['Completed','Cancelled'].includes(ns)&&window._overrideIds?.has(tid)){
+    window._overrideIds.delete(tid);
+  }
   await sb.from('tasks').update(updates).eq('id',tid);
   await logA(tid,t.ba_id,'status',t.status,ns,'status_change',null);
   if(updates.rework_count!==undefined) await logA(tid,t.ba_id,'rework_count',String(t.rework_count||0),String(updates.rework_count),'rework',null);
-  showToast(`Status → ${ns}`,'success'); refreshPage();
+  notify('Status updated',`Task moved to ${ns}`,'success',3500); refreshPage();
 }
 
 async function setRR(tid,result){
@@ -920,7 +1162,7 @@ async function setRR(tid,result){
   if(!t)return;
   await sb.from('tasks').update({review_result:result||null,updated_at:new Date().toISOString()}).eq('id',tid);
   if(result)await logA(tid,t.ba_id,'review_result',t.review_result||'',result,result==='Rework'?'rework':'edited',null);
-  showToast(`Review → ${result||'cleared'}`,'success');
+  notify('Review result set',`Marked as ${result||'cleared'}`,'success',3500);
 }
 
 // ══════════════════════════════════
@@ -1155,21 +1397,25 @@ async function saveTask(){
       if(oldTask.priority!==priority)await logA(id,baId,'priority',oldTask.priority||'Medium',priority,'edited',null);
       if(oldTask.proof_url!==proofUrl&&proofUrl)await logA(id,baId,'proof_url',oldTask.proof_url||'',proofUrl,'edited',null);
       if(status==='On Hold'&&onHoldReason)await logA(id,baId,'on_hold_reason','',onHoldReason,'on_hold',null);
-      showToast('Task updated','success');
+      // Re-lock: saving as Completed or Cancelled revokes any active override
+      if(['Completed','Cancelled'].includes(status)&&window._overrideIds?.has(id)){
+        window._overrideIds.delete(id);
+      }
+      notify('Task updated','Changes saved successfully','success');
     }else{
       const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,remarks,proof_url:proofUrl,rework_count:0,eta_edit_count:0,total_paused_days:0,on_hold_reason:onHoldReason||null}).select().single();
       await logA(nt.id,baId,'created','',status,'created',null);
-      showToast('Task added','success');
+      notify('Task added',`"${desc.slice(0,60)}" added to ${projName}`,'success');
     }
     CM('taskModal');await loadBase();refreshPage();
-  }catch(e){showToast('Error saving: '+e.message,'error');console.error(e);}
+  }catch(e){notify('Error saving task',e.message,'error',0);console.error(e);}
   btn.disabled=false;btn.textContent='Save task';
 }
 
 async function delTask(tid){
   if(!confirm('Delete this task?'))return;
   await sb.from('tasks').delete().eq('id',tid);
-  showToast('Deleted','success');await loadBase();refreshPage();
+  notify('Task deleted','Task has been permanently removed','success',4000);await loadBase();refreshPage();
 }
 
 // ══════════════════════════════════
@@ -1180,19 +1426,23 @@ async function renderWorkload(){
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
   const {data:tasks}=await sb.from('tasks').select('*');
   const allT=tasks||[];
+  window._wlAllTasks=allT; // store for task drill-down
   const gm=parseInt(WS.green_max||14),am=parseInt(WS.amber_max||25),maxScore=am+15;
   const members=visibleAU();
   const scores=members.map(u=>{
     const ut=allT.filter(t=>t.ba_id===u.id);
-    const score=wlScore(ut);
+    // Active tasks = exclude Completed, Cancelled, On Hold
+    const activeTasks=wlActiveTasks(ut);
+    const score=wlScore(ut); // already excludes On Hold/Cancelled/Completed
     const st=wlStatus(score);
     const active=ut.filter(t=>t.status==='In Progress').length;
-    const od=ut.filter(t=>OD(t.eta,t.status)).length;
-    const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+2);
-    const atRisk=ut.filter(t=>!['Completed','Cancelled'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today).length;
+    const od=ut.filter(t=>OD(t.eta,t.status)).length; // now only To Do/In Progress
+    const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+3);
+    // At risk = To Do/In Progress tasks with ETA within 3 calendar days (not yet late)
+    const atRisk=ut.filter(t=>['To Do','In Progress'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today).length;
     const vhCount=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)&&t.priority==='Very High').length;
     const assignable=od>0||score>am?'no':score>gm||atRisk>0||vhCount>1?'check':'yes';
-    return{...u,score,st,active,od,tasks:ut.length,atRisk,vhCount,assignable};
+    return{...u,score,st,active,od,tasks:activeTasks.length,atRisk,vhCount,assignable};
   }).sort((a,b)=>b.score-a.score);
   // Summary counts
   const over=scores.filter(s=>s.score>am).length;
@@ -1213,25 +1463,32 @@ async function renderWorkload(){
     </div>
     <div class="card">
       <div class="ct">Team load — weighted complexity score</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:1rem;display:flex;gap:12px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:.5rem;display:flex;gap:12px;flex-wrap:wrap">
         <span style="color:var(--green)">■</span> Available (0–${gm})
         <span style="color:var(--amber)">■</span> Busy (${gm+1}–${am})
         <span style="color:var(--red)">■</span> Overloaded (${am+1}+)
         <span style="margin-left:8px;color:var(--text3)">Weights: US Doc/Req/UAT=3pts · Testing/DevSupport=2pts · Others=1pt</span>
       </div>
+      <div style="font-size:10.5px;color:var(--text3);margin-bottom:1rem;padding:5px 8px;background:var(--surface2);border-radius:var(--rs);border-left:2px solid var(--amber)">
+        ⚠ <strong style="color:var(--amber)">At risk</strong> = In Progress tasks with ETA within the next 3 days · 
+        🔴 <strong style="color:var(--red)">Late</strong> = In Progress tasks past their ETA ·
+        <span style="color:var(--text3)">Score excludes On Hold, Cancelled &amp; Completed tasks · Click any row to view their tasks</span>
+      </div>
       ${scores.map(s=>{
         const pct=Math.min(s.score/maxScore*100,100);
         const color=s.score<=gm?'var(--green)':s.score<=am?'var(--amber)':'var(--red)';
-        return `<div class="wlrow">
+        return `<div class="wlrow" onclick="toggleWLBaTasks('${s.id}')" id="wlrow-${s.id}">
           <div class="wln">
-            <span>${s.name} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.tasks} tasks · ${s.active} active${s.od?` · <span style="color:var(--red)">${s.od} late</span>`:''}${s.vhCount?` · <span style="color:var(--red)">⚡${s.vhCount} very high</span>`:''}${s.atRisk?` · <span style="color:var(--amber)">⚠${s.atRisk} at risk</span>`:''}</span></span>
+            <span>${s.name} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.tasks} active tasks · ${s.active} in progress${s.od?` · <span style="color:var(--red)">${s.od} late</span>`:''}${s.vhCount?` · <span style="color:var(--red)">⚡${s.vhCount} very high</span>`:''}${s.atRisk?` · <span style="color:var(--amber)">⚠${s.atRisk} at risk</span>`:''}</span></span>
             <div style="display:flex;align-items:center;gap:6px">
               <span style="font-family:var(--mono);font-size:11px;color:${color}">${Math.round(s.score*10)/10}pts</span>
               <span class="${s.st.cls}">${s.st.label}</span>
               <span style="font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;${s.assignable==='yes'?'background:var(--gbg);color:var(--green)':s.assignable==='check'?'background:var(--abg);color:var(--amber)':'background:var(--rbg);color:var(--red)'}">${s.assignable==='yes'?'✓ Can assign':s.assignable==='check'?'⚠ Check first':'✗ Do not assign'}</span>
+              <span style="font-size:10px;color:var(--text3)" id="wl-arrow-${s.id}">▼</span>
             </div>
           </div>
           <div class="wlbg"><div class="wlfill" style="width:${pct}%;background:${color}"></div></div>
+          <div class="wl-ba-tasks" id="wl-tasks-${s.id}"></div>
         </div>`;
       }).join('')}
     </div>
@@ -1246,11 +1503,52 @@ async function renderWorkload(){
           return `<div style="background:${bg};border:1px solid ${bc};border-radius:var(--r);padding:.75rem">
             <div style="font-size:13px;font-weight:500;margin-bottom:3px">${s.name}</div>
             <div style="font-size:11px;color:${clr};font-weight:600;margin-bottom:4px">${lbl}</div>
-            <div style="font-size:10.5px;color:var(--text3)">${Math.round(s.score*10)/10}pts · ${s.tasks} tasks${s.od?` · <span style="color:var(--red)">${s.od} overdue</span>`:''}${s.vhCount?` · ${s.vhCount} very high priority`:''}</div>
+            <div style="font-size:10.5px;color:var(--text3)">${Math.round(s.score*10)/10}pts · ${s.tasks} active tasks${s.od?` · <span style="color:var(--red)">${s.od} overdue</span>`:''}${s.vhCount?` · ${s.vhCount} very high priority`:''}</div>
           </div>`;
         }).join('')}
       </div>
     </div>`;
+}
+
+function toggleWLBaTasks(baId){
+  const panel=document.getElementById(`wl-tasks-${baId}`);
+  const arrow=document.getElementById(`wl-arrow-${baId}`);
+  if(!panel)return;
+  const isOpen=panel.style.display==='block';
+  // Collapse all other panels first
+  document.querySelectorAll('.wl-ba-tasks').forEach(p=>p.style.display='none');
+  document.querySelectorAll('[id^="wl-arrow-"]').forEach(a=>a.textContent='▼');
+  if(isOpen){return;} // was open — just close it
+  // Build task list
+  const allT=window._wlAllTasks||[];
+  const baTasks=allT.filter(t=>t.ba_id===baId&&!['Completed','Cancelled'].includes(t.status)).sort((a,b)=>{
+    const po={'Very High':0,'High':1,'Medium':2,'Low':3};
+    return (po[a.priority||'Medium']||2)-(po[b.priority||'Medium']||2);
+  });
+  const ba=AU.find(u=>u.id===baId);
+  if(!baTasks.length){
+    panel.innerHTML=`<div style="font-size:11px;color:var(--text3);padding:4px 0">No active tasks for ${ba?.name||'this BA'}.</div>`;
+  } else {
+    const rows=baTasks.map(t=>{
+      const od=OD(t.eta,t.status);
+      const ad=isAlmostDue(t.eta,t.status);
+      const sc_=SC(t.status);
+      const statusBadge=`<span class="badge b-${sc_.replace('s-','')}" style="font-size:9.5px">${t.status}</span>`;
+      const etaStyle=od?'color:var(--red);font-weight:600':ad?'color:var(--amber)':'color:var(--text3)';
+      return`<tr>
+        <td style="font-size:11px;font-weight:500;max-width:130px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${ad?` <span class="fp fpd">DUE SOON</span>`:''}</td>
+        <td style="font-size:10px;color:var(--text2)">${t.task_type}</td>
+        <td>${priorityBadge(t.priority||'Medium')}</td>
+        <td style="font-size:10.5px;color:var(--text2);max-width:200px">${t.description}</td>
+        <td style="font-family:var(--mono);font-size:10px;${etaStyle}">${t.eta||'—'}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+    }).join('');
+    panel.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">${ba?.name||'BA'}'s active tasks (${baTasks.length})</div>
+      <div class="tw"><table style="font-size:11px"><thead><tr><th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>ETA</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  panel.style.display='block';
+  if(arrow)arrow.textContent='▲';
 }
 
 function openWLSettings(){
@@ -1322,7 +1620,7 @@ async function exportTasksToExcel(){
   XLSX.utils.book_append_sheet(wb,ws2,'Task Details');
   const date=new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb,`BA_Workload_Report_${date}.xlsx`);
-  showToast('Export ready — check your downloads','success');
+  notify('Export ready','Your Excel file has been downloaded','success',6000);
 }
 
 async function saveWLSettings(){
@@ -1333,7 +1631,7 @@ async function saveWLSettings(){
     sb.from('workload_settings').upsert({key:'amber_max',value:String(am)}),
   ]);
   WS.green_max=gm;WS.amber_max=am;
-  showToast('Thresholds saved','success');renderWorkload();
+  notify('Settings saved','Workload thresholds updated','success');renderWorkload();
 }
 
 // ══════════════════════════════════
@@ -1638,14 +1936,14 @@ async function saveProject(){
   const payload={name,status:document.getElementById('pStatus').value,assigned_ba_id:document.getElementById('pBA').value||null,secondary_ba_id:document.getElementById('pBA2').value||null,supervising_ba_id:document.getElementById('pBASup').value||null,project_manager:document.getElementById('pPM').value.trim()||null,business_owner:document.getElementById('pOwner').value.trim()||null,jira_url:document.getElementById('pJira').value.trim()||null,description:document.getElementById('pDesc').value.trim()||null,updated_at:new Date().toISOString()};
   if(id)await sb.from('projects').update(payload).eq('id',id);
   else await sb.from('projects').insert(payload);
-  showToast(id?'Project updated':'Project added','success');
+  notify(id?'Project updated':'Project added',id?'Project changes saved':'New project created successfully','success');
   CM('projModal');await loadBase();renderProjects();
 }
 
 async function delProj(id){
   if(!confirm('Delete this project?'))return;
   await sb.from('projects').delete().eq('id',id);
-  showToast('Deleted','success');await loadBase();renderProjects();
+  notify('Project deleted','Project has been removed','success',4000);await loadBase();renderProjects();
 }
 
 // ══════════════════════════════════
@@ -1703,14 +2001,44 @@ async function renderAllTasks(){
       <button class="btn btn-a" onclick="openAddTask('${CU.id}')">+ Add task</button>
     </div>
     <div class="card">
-      <div class="ar">
+      <div class="ar" style="margin-bottom:6px">
         <input class="si" id="tSrch" placeholder="Search..." oninput="filterAT()" style="width:170px">
         <select class="si" id="fBA" onchange="filterAT()"><option value="All">All BAs</option>${visibleAU().map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
         <select class="si" id="fSt" onchange="filterAT()"><option value="All">All statuses</option>${TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
         <select class="si" id="fTy" onchange="filterAT()"><option value="All">All types</option>${TASK_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
       </div>
+      <div class="ar" style="margin-bottom:.85rem;gap:6px">
+        <span style="font-size:10.5px;color:var(--text3);font-weight:500;align-self:center">ETA</span>
+        <input type="date" class="si" id="atEtaFrom" style="width:130px" onchange="filterAT()">
+        <span style="font-size:11px;color:var(--text3);align-self:center">→</span>
+        <input type="date" class="si" id="atEtaTo" style="width:130px" onchange="filterAT()">
+        <button class="fc" id="atLateBtn" onclick="toggleATFlag('late')" title="Show only LATE tasks (To Do / In Progress past ETA)">🔴 Late</button>
+        <button class="fc" id="atDueSoonBtn" onclick="toggleATFlag('soon')" title="Show only tasks due within 3 days (To Do / In Progress)">🟡 Due soon</button>
+        <button class="btn btn-g btn-sm" onclick="clearATFilters()">Clear filters</button>
+      </div>
       <div id="atTable"></div>
     </div>`;
+  window._atFlags={late:false,soon:false};
+  filterAT();
+}
+
+function toggleATFlag(flag){
+  if(!window._atFlags) window._atFlags={late:false,soon:false};
+  window._atFlags[flag]=!window._atFlags[flag];
+  document.getElementById('atLateBtn')?.classList.toggle('active',window._atFlags.late);
+  document.getElementById('atDueSoonBtn')?.classList.toggle('active',window._atFlags.soon);
+  filterAT();
+}
+
+function clearATFilters(){
+  const fields=['tSrch'];
+  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['fBA','fSt','fTy'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
+  const fe=document.getElementById('atEtaFrom'),te=document.getElementById('atEtaTo');
+  if(fe)fe.value='';if(te)te.value='';
+  window._atFlags={late:false,soon:false};
+  document.getElementById('atLateBtn')?.classList.remove('active');
+  document.getElementById('atDueSoonBtn')?.classList.remove('active');
   filterAT();
 }
 
@@ -1719,11 +2047,18 @@ function filterAT(){
   const bf=document.getElementById('fBA')?.value||'All';
   const sf=document.getElementById('fSt')?.value||'All';
   const tf=document.getElementById('fTy')?.value||'All';
+  const from=document.getElementById('atEtaFrom')?.value||'';
+  const to=document.getElementById('atEtaTo')?.value||'';
+  const flags=window._atFlags||{late:false,soon:false};
   const f=_AT.filter(t=>{
     if(bf!=='All'&&t.ba_id!==bf)return false;
     if(sf!=='All'&&t.status!==sf)return false;
     if(tf!=='All'&&t.task_type!==tf)return false;
     if(q&&!t.project_name.toLowerCase().includes(q)&&!t.description.toLowerCase().includes(q))return false;
+    if(from&&t.eta&&t.eta<from)return false;
+    if(to&&t.eta&&t.eta>to)return false;
+    if(flags.late&&!OD(t.eta,t.status))return false;
+    if(flags.soon&&!isAlmostDue(t.eta,t.status))return false;
     return true;
   });
   document.getElementById('atTable').innerHTML=buildTT(f,'All','all',true);
@@ -1882,16 +2217,33 @@ function buildAL(entries,flag){
 // ══════════════════════════════════
 // KPI
 // ══════════════════════════════════
+// Helper: render per-type avg days chips from avgByType map
+function renderAvgByType(avgByType,fontSize='10px',chipGap='4px'){
+  const entries=Object.entries(avgByType||{});
+  if(!entries.length) return `<span style="font-size:${fontSize};color:var(--text3)">—</span>`;
+  const colFn=d=>d<=3?'var(--green)':d<=7?'var(--blue)':d<=14?'var(--amber)':'var(--red)';
+  return entries.map(([tt,d])=>
+    `<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:3px;background:var(--surface3);font-family:var(--mono);font-size:${fontSize};margin:1px;white-space:nowrap">
+      <span style="color:var(--text3)">${tt}:</span>
+      <span style="color:${d!=null?colFn(d):'var(--text3)'};font-weight:600">${d!=null?d+'d':'—'}</span>
+    </span>`
+  ).join('');
+}
+
 async function renderKPI(){
   const el=document.getElementById('pageKPI');
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
   const now=new Date();
   const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
-  const {data:tasks}=await sb.from('tasks').select('*').gte('updated_at',ms);
-  const scores=visibleAU().map(u=>calcKPI(u,tasks||[])).sort((a,b)=>b.total-a.total);
+  const [{data:tasks},{data:auditRaw}]=await Promise.all([
+    sb.from('tasks').select('*').gte('updated_at',ms),
+    sb.from('task_audit').select('task_id,field_name,new_value,changed_at').eq('field_name','status')
+  ]);
+  const auditEntries=auditRaw||[];
+  const scores=visibleAU().map(u=>calcKPI(u,tasks||[],auditEntries)).sort((a,b)=>b.total-a.total);
   el.innerHTML=`
     <div class="ph"><div class="pt">KPI scores</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})} · Quality 50pts · Timeliness 50pts</div></div>
-    <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (50)</th><th>Timeliness (50)</th><th>Avg US/CR Days</th><th>Avg All Days</th><th>Rework%</th><th>At Risk</th><th>Total</th><th>Rating</th></tr></thead>
+    <div class="card"><div class="tw"><table><thead><tr><th>Name</th><th>Quality (50)</th><th>Timeliness (50)</th><th>Avg days by task type</th><th>Rework%</th><th>At Risk</th><th>Total</th><th>Rating</th></tr></thead>
     <tbody>${scores.map(s=>{
       const qDisp=s.qScore!=null?`<div style="display:flex;align-items:center;gap:5px"><div style="width:55px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${s.quality||0}%;height:100%;background:${KC(s.quality||0)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.qScore}/50</span></div>`:`<span style="color:var(--text3);font-size:10.5px;font-family:var(--mono)">—</span>`;
       const tDisp=s.tScore!=null?`<div style="display:flex;align-items:center;gap:5px"><div style="width:55px;height:3px;background:var(--surface3);border-radius:2px"><div style="width:${s.timeliness||0}%;height:100%;background:${KC(s.timeliness||0)};border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">${s.tScore}/50</span></div>`:`<span style="color:var(--text3);font-size:10.5px;font-family:var(--mono)">—</span>`;
@@ -1901,8 +2253,7 @@ async function renderKPI(){
       return`<tr><td style="font-weight:500">${s.name}</td>
         <td>${qDisp}</td>
         <td>${tDisp}</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--text2)">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</td>
-        <td style="font-family:var(--mono);font-size:11px;color:var(--text2)">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</td>
+        <td style="max-width:260px">${renderAvgByType(s.avgByType)}</td>
         <td style="font-family:var(--mono);font-size:11px;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</td>
         <td>${atRiskDisp}</td>
         <td>${totalDisp}</td>
@@ -1917,23 +2268,37 @@ async function renderKPI(){
 function showKPID(id){
   const s=window._kpiS?.find(x=>x.id===id);if(!s)return;
   const rows=[
-    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`:'No reviewed docs this period'},
+    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} no rework, ${s.reworkCount} reworked)`:'No completed doc tasks this period'},
     {l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:50,n:s.hasCompleted?`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted} completed)`:'No completed tasks this period'},
   ];
-  const extraStats=`
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:.85rem 0;padding:.75rem;background:var(--surface2);border-radius:var(--rs)">
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Avg US/CR completion</div><div style="font-family:var(--mono);font-size:15px;font-weight:600">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</div></div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Avg all task completion</div><div style="font-family:var(--mono);font-size:15px;font-weight:600">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</div></div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">Rework rate</div><div style="font-family:var(--mono);font-size:15px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</div></div>
-    </div>
-    ${s.atRisk.length?`<div style="padding:.6rem;background:var(--rbg);border-radius:var(--rs);margin-bottom:.75rem"><div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px">⚠ Tasks at risk (ETA ≤2 days)</div>${s.atRisk.map(t=>`<div style="font-size:10.5px;color:var(--text2)">• ${t.project_name} — ${t.description} <span style="color:var(--red);font-family:var(--mono)">(${t.eta})</span></div>`).join('')}</div>`:``}`;
+  const avgTypeRows=Object.entries(s.avgByType||{});
+  const avgTypeBlock=avgTypeRows.length?`
+    <div style="margin:.85rem 0;padding:.75rem;background:var(--surface2);border-radius:var(--rs)">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Avg working days to complete — by task type</div>
+      <div style="font-size:9.5px;color:var(--text3);margin-bottom:8px">Measured from first In Progress → Completed. Excludes weekends, public holidays, and leave days.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px">
+        ${avgTypeRows.map(([tt,d])=>{
+          const col=d==null?'var(--text3)':d<=3?'var(--green)':d<=7?'var(--blue)':d<=14?'var(--amber)':'var(--red)';
+          return`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--surface1);border-radius:4px;border:1px solid var(--border)">
+            <span style="font-size:10.5px;color:var(--text2)">${tt}</span>
+            <span style="font-family:var(--mono);font-size:13px;font-weight:700;color:${col}">${d!=null?d+'d':'—'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:
+    `<div style="margin:.85rem 0;padding:.6rem;background:var(--surface2);border-radius:var(--rs);font-size:11px;color:var(--text3)">No completed tasks this period — avg days not available</div>`;
+  const reworkBlock=`<div style="display:flex;align-items:center;gap:8px;padding:.6rem;background:var(--surface2);border-radius:var(--rs);margin-bottom:.75rem">
+    <div style="font-size:11px;color:var(--text2);flex:1">Rework rate</div>
+    <div style="font-family:var(--mono);font-size:15px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</div>
+  </div>`;
+  const atRiskBlock=s.atRisk.length?`<div style="padding:.6rem;background:var(--rbg);border-radius:var(--rs);margin-bottom:.75rem"><div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px">⚠ Tasks at risk (ETA ≤2 days)</div>${s.atRisk.map(t=>`<div style="font-size:10.5px;color:var(--text2)">• ${t.project_name} — ${t.description} <span style="color:var(--red);font-family:var(--mono)">(${t.eta})</span></div>`).join('')}</div>`:'';
   const totalDisp=s.total!=null?`<span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span>`:`<span style="font-size:14px;color:var(--text3)">No data yet</span>`;
   document.getElementById('kpiDetail').innerHTML=`<div class="card"><div class="ct">${s.name} — breakdown</div>
     ${rows.map(r=>{
       if(r.p==null) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;font-size:11px;color:var(--text3)">—</div><div style="font-family:var(--mono);font-size:10.5px;color:var(--text3);width:42px;text-align:right">—/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`;
       return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:155px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:42px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 163px">${r.n}</div>`;
     }).join('')}
-    ${extraStats}
+    ${avgTypeBlock}${reworkBlock}${atRiskBlock}
     <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-size:13px;font-weight:500">Total</span>${totalDisp}</div>
     ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
   </div>`;
@@ -1945,12 +2310,31 @@ async function renderMyKPI(){
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
   const now=new Date();
   const ms=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
-  const {data:tasks}=await sb.from('tasks').select('*').eq('ba_id',CU.id).gte('updated_at',ms);
-  const s=calcKPI(CU,tasks||[]);
+  const [{data:tasks},{data:auditRaw}]=await Promise.all([
+    sb.from('tasks').select('*').eq('ba_id',CU.id).gte('updated_at',ms),
+    sb.from('task_audit').select('task_id,field_name,new_value,changed_at').eq('field_name','status').eq('ba_id',CU.id)
+  ]);
+  const auditEntries=auditRaw||[];
+  const s=calcKPI(CU,tasks||[],auditEntries);
   const rows=[
-    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} pass, ${s.reworkCount} rework)`:'No reviewed docs this period'},
+    {l:'Documentation quality',p:s.quality,sc:s.qScore,mx:50,n:s.hasDocs?`${s.quality}% first-pass (${s.passCount} no rework, ${s.reworkCount} reworked)`:'No completed doc tasks this period'},
     {l:'Delivery timeliness',p:s.timeliness,sc:s.tScore,mx:50,n:s.hasCompleted?`${s.timeliness}% on-time (${s.onTime}/${s.totalCompleted})`:'No completed tasks this period'},
   ];
+  const avgTypeRows=Object.entries(s.avgByType||{});
+  const avgTypeBlock=avgTypeRows.length?`
+    <div style="margin:.75rem 0;padding:.65rem;background:var(--surface2);border-radius:var(--rs)">
+      <div style="font-size:9.5px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Avg working days to complete — by task type</div>
+      <div style="font-size:9px;color:var(--text3);margin-bottom:8px">From first In Progress → Completed. Excludes weekends, holidays, and leave.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:5px">
+        ${avgTypeRows.map(([tt,d])=>{
+          const col=d==null?'var(--text3)':d<=3?'var(--green)':d<=7?'var(--blue)':d<=14?'var(--amber)':'var(--red)';
+          return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 7px;background:var(--surface1);border-radius:4px;border:1px solid var(--border)">
+            <span style="font-size:10px;color:var(--text2)">${tt}</span>
+            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${col}">${d!=null?d+'d':'—'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:`<div style="margin:.75rem 0;padding:.5rem;background:var(--surface2);border-radius:var(--rs);font-size:10.5px;color:var(--text3)">No completed tasks this period</div>`;
   el.innerHTML=`
     <div class="ph"><div class="pt">My KPI</div><div class="ps">${now.toLocaleString('en-MY',{month:'long',year:'numeric'})}</div></div>
     <div class="card" style="max-width:520px">
@@ -1963,38 +2347,43 @@ async function renderMyKPI(){
         if(r.p==null) return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;font-size:11px;color:var(--text3)">—</div><div style="font-family:var(--mono);font-size:10.5px;color:var(--text3);width:40px;text-align:right">—/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`;
         return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:150px;font-size:11px;color:var(--text2)">${r.l}</div><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px"><div style="width:${Math.round(Math.min(r.p,100))}%;height:100%;background:${KC(r.p)};border-radius:3px;transition:width .5s"></div></div><div style="font-family:var(--mono);font-size:10.5px;color:${KC(r.p)};width:40px;text-align:right">${r.sc}/${r.mx}</div></div><div style="font-size:10px;color:var(--text3);margin:-4px 0 8px 158px">${r.n}</div>`;
       }).join('')}
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:.75rem 0;padding:.65rem;background:var(--surface2);border-radius:var(--rs)">
-        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Avg US/CR days</div><div style="font-family:var(--mono);font-size:14px;font-weight:600">${s.avgDocDays!=null?s.avgDocDays+'d':'—'}</div></div>
-        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Avg all task days</div><div style="font-family:var(--mono);font-size:14px;font-weight:600">${s.avgAllDays!=null?s.avgAllDays+'d':'—'}</div></div>
-        <div><div style="font-size:9.5px;color:var(--text3);margin-bottom:2px">Rework rate</div><div style="font-family:var(--mono);font-size:14px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</div></div>
+      ${avgTypeBlock}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem .65rem;background:var(--surface2);border-radius:var(--rs);margin-bottom:.75rem">
+        <span style="font-size:10px;color:var(--text2)">Rework rate</span>
+        <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${s.reworkRate==null?'var(--text3)':s.reworkRate>30?'var(--red)':s.reworkRate>15?'var(--amber)':'var(--green)'}">${s.reworkRate!=null?s.reworkRate+'%':'—'}</span>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)"><span style="font-weight:500">Total</span>${s.total!=null?`<span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${KC(s.total)}">${s.total}/100</span>`:`<span style="font-size:14px;color:var(--text3)">No data yet</span>`}</div>
       ${s.notes.length?`<div style="margin-top:.75rem;padding:.65rem;background:var(--abg);border-radius:var(--rs)">${s.notes.map(n=>`<div style="font-size:11px;color:var(--amber)">⚠ ${n}</div>`).join('')}</div>`:''}
     </div>`;
 }
 
-function calcKPI(ba,tasks){
+function calcKPI(ba,tasks,auditEntries){
   const bt=tasks.filter(t=>t.ba_id===ba.id);
   const done=bt.filter(t=>t.status==='Completed'&&t.task_type!==MEETING_TYPE);
   // Timeliness — null/empty if no completed tasks
   const onTime=done.filter(t=>!t.eta||new Date(t.eta)>=new Date(t.updated_at)).length;
   const hasCompleted=done.length>0;
   const timeliness=hasCompleted?Math.round(onTime/done.length*100):null;
-  // Quality — null/empty if no reviewed docs
-  const docs=bt.filter(t=>DOC_TYPES.includes(t.task_type)&&t.review_result);
-  const passCount=docs.filter(t=>t.review_result==='Pass').length;
-  const reworkCount=docs.filter(t=>t.review_result==='Rework'||t.rework_count>0).length;
+  // Quality — based on completed DOC_TYPE tasks, first-pass rate via rework_count
+  const docs=done.filter(t=>DOC_TYPES.includes(t.task_type));
+  const passCount=docs.filter(t=>(t.rework_count||0)===0).length;
+  const reworkCount=docs.filter(t=>(t.rework_count||0)>0).length;
   const hasDocs=docs.length>0;
   const quality=hasDocs?Math.round(passCount/docs.length*100):null;
-  // Avg completion time for US/CR/UserGuide docs — working days
-  const doneDocs=done.filter(t=>DOC_TYPES.includes(t.task_type)&&t.created_at&&t.updated_at);
-  const avgDocDays=doneDocs.length?Math.round(doneDocs.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,ba.id),0)/doneDocs.length):null;
-  // Avg completion time for all tasks — working days
-  const doneAll=done.filter(t=>t.created_at&&t.updated_at);
-  const avgAllDays=doneAll.length?Math.round(doneAll.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,ba.id),0)/doneAll.length):null;
-  // Rework rate
-  const docTotal=bt.filter(t=>DOC_TYPES.includes(t.task_type)).length;
-  const reworkRate=docTotal?Math.round(reworkCount/docTotal*100):null;
+  // Avg completion time per task type — working days from first In Progress → first Completed (via audit log)
+  const avgByType={};
+  const usedTaskTypes=[...new Set(done.map(t=>t.task_type))];
+  usedTaskTypes.forEach(tt=>{
+    const typed=done.filter(t=>t.task_type===tt);
+    if(!typed.length){avgByType[tt]=null;return;}
+    const total=typed.reduce((s,t)=>{
+      const {actualStart,actualEnd}=getTaskActualDates(t,auditEntries);
+      return s+workingDays(actualStart,actualEnd,ba.id);
+    },0);
+    avgByType[tt]=Math.round(total/typed.length);
+  });
+  // Rework rate — reworked completed docs ÷ total completed docs
+  const reworkRate=hasDocs?Math.round(reworkCount/docs.length*100):null;
   // Active tasks at risk (ETA within 2 days, not done)
   const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+2);
   const atRisk=bt.filter(t=>!['Completed','Cancelled'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today);
@@ -2007,8 +2396,8 @@ function calcKPI(ba,tasks){
   if(quality!=null&&quality<70)notes.push(`Low first-pass rate — ${reworkCount} rework${reworkCount!==1?'s':''}`);
   if(timeliness!=null&&timeliness<75)notes.push('Frequent ETA slippage — check audit log');
   if(atRisk.length)notes.push(`${atRisk.length} task${atRisk.length!==1?'s':''} at risk (ETA ≤2 days)`);
-  if(!hasCompleted&&!hasDocs)notes.push('No completed tasks or reviewed docs this period — KPI pending');
-  return{id:ba.id,name:ba.name,quality,timeliness,qScore,tScore,total,passCount,reworkCount,reworkRate,onTime,totalCompleted:done.length,avgDocDays,avgAllDays,atRisk,notes,hasDocs,hasCompleted};
+  if(!hasCompleted&&!hasDocs)notes.push('No completed doc tasks this period — KPI pending');
+  return{id:ba.id,name:ba.name,quality,timeliness,qScore,tScore,total,passCount,reworkCount,reworkRate,onTime,totalCompleted:done.length,avgByType,atRisk,notes,hasDocs,hasCompleted};
 }
 function KC(p){return p>=85?'var(--green)':p>=70?'var(--blue)':p>=55?'var(--amber)':'var(--red)';}
 function RLbl(s){return s>=90?'Excellent':s>=75?'Good':s>=60?'Needs improvement':'Critical';}
@@ -2207,9 +2596,9 @@ async function confirmImport(){
   }
   await loadBase();
   if(failed>0){
-    showToast(`Imported ${imported} — ${failed} failed. Check browser console (F12) for details.`,'error');
+    notify('Import partially failed', `${imported} imported · ${failed} failed — check browser console (F12) for details`, 'error', 0);
   } else {
-    showToast(`Successfully imported ${imported} ${importType} ✓`,'success');
+    notify('Import successful ✓', `${imported} ${importType} imported into the system`, 'success', 7000);
   }
   btn.disabled=false;btn.textContent=imported>0?'Import done':'Import failed';
   renderImport();
@@ -2246,6 +2635,7 @@ function dlTemplate(){
 async function renderRoles(){
   const el=document.getElementById('pageRoles');
   await loadBase();
+  const currentUserIsManager=isManagerRole(CU?.role_id);
   el.innerHTML=`
     <div class="phr">
       <div><div class="pt">Roles & permissions</div><div class="ps">${AR.length} roles defined</div></div>
@@ -2255,18 +2645,20 @@ async function renderRoles(){
       ${AR.map(r=>{
         const perms=Array.isArray(r.permissions)?r.permissions:[];
         const userCount=AU.filter(u=>u.role_id===r.id).length;
-        const isLocked=r.is_manager===true||r.name?.toLowerCase()==='manager';
+        const isProtected=r.is_manager===true||r.name?.toLowerCase()==='manager';
+        // Managers CAN edit protected roles (but is_manager flag stays locked)
+        const canEdit=!isProtected||currentUserIsManager;
         return`<div class="role-row">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px">${r.name}
               ${r.is_system?`<span style="font-size:9px;font-family:var(--mono);color:var(--text3);background:var(--surface3);padding:1px 5px;border-radius:3px">system</span>`:''}
-              ${isLocked?`<span style="font-size:9px;font-family:var(--mono);color:var(--amber);background:var(--abg);padding:1px 5px;border-radius:3px">🔒 protected</span>`:''}
+              ${isProtected?`<span style="font-size:9px;font-family:var(--mono);color:var(--amber);background:var(--abg);padding:1px 5px;border-radius:3px">🔒 protected</span>`:''}
             </div>
             <div style="font-size:10.5px;color:var(--text3);margin-top:2px">${perms.length} permissions · ${userCount} user${userCount!==1?'s':''}</div>
             <div style="margin-top:5px;display:flex;gap:3px;flex-wrap:wrap">${perms.slice(0,6).map(p=>`<span style="font-size:9.5px;background:var(--surface3);color:var(--text3);padding:1px 5px;border-radius:3px">${p}</span>`).join('')}${perms.length>6?`<span style="font-size:9.5px;color:var(--text3)">+${perms.length-6} more</span>`:''}</div>
           </div>
-          ${!isLocked?`<button class="btn btn-g btn-sm" onclick="openEditRole('${r.id}')">Edit</button>`:`<button class="btn btn-sm" disabled style="opacity:.4;cursor:not-allowed">Edit</button>`}
-          ${(!r.is_system&&!isLocked)?`<button class="btn btn-d btn-sm" onclick="delRole('${r.id}','${r.name}')">Delete</button>`:''}
+          ${canEdit?`<button class="btn btn-g btn-sm" onclick="openEditRole('${r.id}')">Edit</button>`:`<span style="font-size:10px;color:var(--text3);padding:2px 8px" title="Only managers can edit protected roles">🔒 Locked</span>`}
+          ${(!r.is_system&&!isProtected)?`<button class="btn btn-d btn-sm" onclick="delRole('${r.id}','${r.name}')">Delete</button>`:''}
         </div>`;
       }).join('')}
     </div>`;
@@ -2324,16 +2716,21 @@ async function saveRole(){
     const btn=el.getAttribute('onclick');
     return btn.match(/'([^']+)'\)$/)?.[1];
   }).filter(Boolean);
-  if(id)await sb.from('roles').update({name,permissions:perms}).eq('id',id);
+  if(id){
+    const existing=AR.find(r=>r.id===id);
+    // Preserve is_manager flag for protected roles — it cannot be changed via UI
+    const extraFields=existing?.is_manager?{is_manager:true}:{};
+    await sb.from('roles').update({name,...extraFields,permissions:perms}).eq('id',id);
+  }
   else await sb.from('roles').insert({name,permissions:perms,is_system:false});
-  showToast(id?'Role updated':'Role created','success');
+  notify(id?'Role updated':'Role created',id?'Role permissions saved':'New role added to the system','success');
   CM('roleModal');await loadBase();renderRoles();
 }
 
 async function delRole(id,name){
   if(!confirm(`Delete role "${name}"? Users with this role will lose their permissions.`))return;
   await sb.from('roles').delete().eq('id',id);
-  await loadBase();showToast('Role deleted','success');renderRoles();
+  await loadBase();notify('Role deleted','Role has been removed','success',4000);renderRoles();
 }
 
 // ══════════════════════════════════
@@ -2441,7 +2838,7 @@ async function saveLeave(){
   }
   CM('leaveModal');
   await loadBase();
-  showToast('Leave saved'+(affected.length?' · '+affected.length+' ETA'+(affected.length!==1?'s':'')+' adjusted':''),'success');
+  notify('Leave saved', affected.length?`${affected.length} task ETA${affected.length!==1?'s':''} auto-adjusted`:'Leave recorded successfully', 'success');
   renderAdmin();
 }
 
@@ -2449,7 +2846,7 @@ async function deleteLeave(leaveId, baName){
   if(!confirm(`Remove this leave entry for ${baName}?\n\nNote: ETAs that were auto-adjusted when this leave was added will NOT be reversed automatically.`))return;
   await sb.from('ba_leaves').delete().eq('id',leaveId);
   await loadBase();
-  showToast('Leave entry removed','success');
+  notify('Leave removed','Leave entry has been deleted','success',4000);
   renderAdmin();
 }
 
@@ -2495,10 +2892,10 @@ async function saveUser(){
     if(pin.length===4)upd.pin_hash=pin;
     await sb.from('users').update(upd).eq('id',id);
     if(CU.id===id){CU={...CU,...upd};sessionStorage.setItem('ba_user',JSON.stringify(CU));}
-    showToast('Updated','success');
+    notify('Member updated','Profile changes saved successfully','success');
   }else{
     await sb.from('users').insert({name,email,pin_hash:pin,role_id:roleId,role:'ba',hide_from_non_managers:false});
-    showToast('Member added','success');
+    notify('Member added','New team member has been created','success');
   }
   CM('userModal');await loadBase();renderAdmin();
 }
@@ -2506,7 +2903,7 @@ async function saveUser(){
 async function delUser(id,name){
   if(!confirm(`Remove ${name}? Their tasks will be preserved.`))return;
   await sb.from('users').delete().eq('id',id);
-  await loadBase();showToast(`${name} removed`,'success');renderAdmin();
+  await loadBase();notify('Member removed',`${name} has been removed from the team`,'success',4000);renderAdmin();
 }
 
 // ══════════════════════════════════
@@ -2530,7 +2927,7 @@ async function savePin(){
   if(p1===cur){err.textContent='New PIN must differ.';return;}
   await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
   CU.pin_hash=p1;sessionStorage.setItem('ba_user',JSON.stringify(CU));
-  CM('pinModal');showToast('PIN updated','success');
+  CM('pinModal');notify('PIN updated','Your PIN has been changed successfully','success');
 }
 
 
@@ -2540,8 +2937,8 @@ async function savePin(){
 function overrideTask(tid) {
   if (!window._overrideIds) window._overrideIds = new Set();
   window._overrideIds.add(tid);
-  logA(tid, CU.id, 'override', 'Completed', 'Unlocked by override', 'edited', null);
-  showToast('Task unlocked for editing','success');
+  logA(tid, CU.id, 'override', 'Locked', 'Unlocked by manager override', 'edited', null);
+  notify('Task unlocked','This task is now editable. Lock will re-apply when saved as Completed or Cancelled.','info',5000);
   refreshPage();
 }
 
@@ -2591,7 +2988,7 @@ async function addRemark(tid) {
     <div><span class="remark-author">${r.user_name}</span><span class="remark-time">${new Date(r.created_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>
     <div class="remark-text">${r.content.replace(/\n/g,'<br>')}</div>
   </div>`).join('');
-  showToast('Remark added', 'success');
+  notify('Remark added','Your comment has been saved','success',4000);
 }
 
 async function showTaskHistory(tid) {
@@ -2645,7 +3042,41 @@ function OM(id){document.getElementById(id).classList.add('open');}
 function CM(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 let _tt;
-function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;clearTimeout(_tt);_tt=setTimeout(()=>{t.className=''},2500);}
+function showToast(msg,type='success',duration=2500){
+  // legacy small toast for quick feedback — keep for minor actions
+  const t=document.getElementById('toast');t.textContent=msg;t.className=`show ${type}`;clearTimeout(_tt);_tt=setTimeout(()=>{t.className=''},duration);
+}
+
+// ── Notification system ──
+const NOTIF_ICONS={success:'✓',error:'✕',info:'ℹ',warning:'⚠'};
+let _notifId=0;
+function notify(title, msg='', type='success', duration=5000){
+  const stack=document.getElementById('notifStack');
+  if(!stack) return showToast(title, type, duration);
+  const id='n'+(++_notifId);
+  const icon=NOTIF_ICONS[type]||'ℹ';
+  const card=document.createElement('div');
+  card.className=`notif-card ${type}`;
+  card.id=id;
+  card.innerHTML=`
+    <div class="notif-icon">${icon}</div>
+    <div class="notif-body">
+      <div class="notif-title">${title}</div>
+      ${msg?`<div class="notif-msg">${msg}</div>`:''}
+    </div>
+    <button class="notif-close" onclick="dismissNotif('${id}')">✕</button>
+    <div class="notif-bar" style="animation-duration:${duration}ms"></div>`;
+  stack.appendChild(card);
+  if(duration>0) setTimeout(()=>dismissNotif(id), duration);
+}
+function dismissNotif(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.style.transition='all .2s';
+  el.style.opacity='0';
+  el.style.transform='translateX(20px)';
+  setTimeout(()=>el.remove(), 200);
+}
 
 function refreshPage(){
   const map={MyTasks:renderMyTasks,MyKPI:renderMyKPI,TeamBoard:renderTeamBoard,Projects:renderProjects,Dashboard:renderDashboard,Workload:renderWorkload,AIAdvisor:renderAIAdvisor,AllTasks:renderAllTasks,AuditLog:renderAuditLog,KPI:renderKPI,Import:renderImport,Roles:renderRoles,Admin:renderAdmin,Analytics:renderAnalytics};
@@ -2667,7 +3098,10 @@ async function renderAnalytics() {
   destroyCharts();
   const el = document.getElementById('pageAnalytics');
   el.innerHTML = `<div class="lov"><div class="sp"></div></div>`;
-  const { data: tasks } = await sb.from('tasks').select('*').order('created_at', { ascending: true });
+  const [{ data: tasks }, { data: auditRaw }] = await Promise.all([
+    sb.from('tasks').select('*').order('created_at', { ascending: true }),
+    sb.from('task_audit').select('task_id,field_name,new_value,changed_at,ba_id').eq('field_name','status')
+  ]);
   const allT = tasks || [];
   const now = new Date();
   const defFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
@@ -2690,6 +3124,7 @@ async function renderAnalytics() {
     </div>
     <div id="analyticsBody"></div>`;
   window._analyticsData = allT;
+  window._analyticsAudit = auditRaw || [];
   // Small delay to ensure DOM is ready before drawing charts
   setTimeout(()=>refreshAnalytics(), 50);
 }
@@ -2727,6 +3162,7 @@ function refreshAnalytics() {
   if (!from || !to) return;
   destroyCharts();
   const allT = window._analyticsData || [];
+  const auditEntries = window._analyticsAudit || [];
   const fromD = new Date(from), toD = new Date(to + 'T23:59:59');
   // Filter by date range (use updated_at for completion, created_at for creation)
   let members = baId === 'all' ? visibleAU() : visibleAU().filter(u => u.id === baId);
@@ -2758,16 +3194,20 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     'On Hold': members.map(u => tasks.filter(t=>t.ba_id===u.id&&t.status==='On Hold').length),
   };
   // ── Chart 4: Avg completion days by task type ──
-  const DOC_TRACKED = ['User Story Doc','CR Addendum Doc','Requirement Gathering','App Testing'];
-  const avgDays = DOC_TRACKED.map(type => {
-    const done = tasks.filter(t => t.task_type === type && t.status === 'Completed' && t.created_at && t.updated_at);
+  // ── Chart 4: Avg completion days by task type (all types, workingDays, audit-based start) ──
+  const CH4_TYPES = [...new Set(tasks.filter(t=>t.status==='Completed'&&t.task_type!==MEETING_TYPE).map(t=>t.task_type))].sort();
+  const avgDays = CH4_TYPES.map(type => {
+    const done = tasks.filter(t => t.task_type === type && t.status === 'Completed');
     if (!done.length) return 0;
-    const avg = done.reduce((s,t) => s + Math.max(0, DD(t.created_at, t.updated_at)), 0) / done.length;
-    return Math.round(avg * 10) / 10;
+    const total = done.reduce((s,t) => {
+      const {actualStart,actualEnd} = getTaskActualDates(t, auditEntries);
+      return s + workingDays(actualStart, actualEnd, t.ba_id);
+    }, 0);
+    return Math.round(total / done.length);
   });
   // ── Chart 5: KPI scores per BA ──
   const kpiScores = members.map(u => {
-    const s = calcKPI(u, tasks);
+    const s = calcKPI(u, tasks, auditEntries);
     return { name: u.name, quality: s.qScore, timeliness: s.tScore, coverage: s.cScore, total: s.total };
   });
   // ── Chart 6: Completion trend over time (weekly buckets) ──
@@ -2795,14 +3235,14 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     </div>
     <div class="chart-card"><div class="chart-title">Task status distribution per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch3" role="img" aria-label="Status distribution stacked bar chart">Status breakdown per team member.</canvas></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-      <div class="chart-card"><div class="chart-title">Average completion days by task type</div><div class="chart-wrap" style="height:220px"><canvas id="ch4" role="img" aria-label="Average days to complete by task type">Average days from creation to completion.</canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Avg working days to complete — by task type</div><div class="chart-wrap" style="height:220px"><canvas id="ch4" role="img" aria-label="Average working days to complete by task type">Average working days from first In Progress to Completed, by task type.</canvas></div></div>
       <div class="chart-card"><div class="chart-title">Review pass vs rework rate</div><div class="chart-wrap" style="height:${Math.max(rvMembers.length*36+60,160)}px"><canvas id="ch5" role="img" aria-label="Review results per BA">Pass and rework counts per BA.</canvas></div></div>
     </div>
     <div class="chart-card"><div class="chart-title">Task completion trend (weekly)</div><div class="chart-wrap" style="height:200px"><canvas id="ch6" role="img" aria-label="Weekly task completion trend">Completed tasks per week.</canvas></div></div>
     <div class="chart-card"><div class="chart-title">KPI score breakdown per BA</div><div class="chart-wrap" style="height:${chartH(members.length)}px"><canvas id="ch7" role="img" aria-label="KPI scores per BA stacked">KPI pillar scores per team member.</canvas></div></div>
     <div class="card" style="margin-top:1rem">
       <div class="ct">Avg completion days by task type — per BA</div>
-      <div class="fhint" style="margin-bottom:.75rem">Working days from task creation to completion — excludes weekends, public holidays, and BA leave days. Excludes Meeting/Discussion. — = no completed tasks of that type yet.</div>
+      <div class="fhint" style="margin-bottom:.75rem">Working days from first <em>In Progress</em> → <em>Completed</em> (via audit log) — excludes weekends, public holidays, and BA leave days. Excludes Meeting/Discussion. — = no completed tasks of that type yet.</div>
       <div id="avgCompTable"></div>
     </div>
   `;
@@ -2822,7 +3262,7 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
     {label:'On Hold',data:statusData['On Hold'],backgroundColor:'#5a5a6a',borderRadius:2},
   ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
   // ch4 — avg days
-  _charts.ch4 = new Chart(document.getElementById('ch4'),{type:'bar',data:{labels:DOC_TRACKED,datasets:[{label:'Avg days',data:avgDays,backgroundColor:['#7c6cfa','#3ecf8e','#f6a623','#4da6ff'],borderRadius:4}]},options:{...opts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8888a0',font:{size:10}}},y:{ticks:{color:'#8888a0',font:{size:10}},title:{display:true,text:'Days',color:'#55556a',font:{size:10}}}}}});
+  _charts.ch4 = new Chart(document.getElementById('ch4'),{type:'bar',data:{labels:CH4_TYPES,datasets:[{label:'Avg working days',data:avgDays,backgroundColor:CH4_TYPES.map((_,i)=>['#7c6cfa','#3ecf8e','#f6a623','#4da6ff','#f56565','#68d391','#fbd38d','#90cdf4','#b794f4','#fc8181'][i%10]),borderRadius:4}]},options:{...opts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8888a0',font:{size:10}}},y:{ticks:{color:'#8888a0',font:{size:10}},title:{display:true,text:'Working days',color:'#55556a',font:{size:10}}}}}});
   // ch5 — pass/rework
   if(rvMembers.length){
     _charts.ch5 = new Chart(document.getElementById('ch5'),{type:'bar',data:{labels:rvMembers.map(u=>u.name.split(' ')[0]),datasets:[
@@ -2847,17 +3287,20 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
   // ── Avg completion days by task type per BA ───────────────────────────
   const EXCL_TYPES=[MEETING_TYPE];
   const usedTypes=[...new Set(allT
-    .filter(t=>t.status==='Completed'&&!EXCL_TYPES.includes(t.task_type)&&t.created_at&&t.updated_at)
+    .filter(t=>t.status==='Completed'&&!EXCL_TYPES.includes(t.task_type))
     .map(t=>t.task_type)
   )].sort();
 
   if(usedTypes.length && members.length){
-    // Build data: for each BA × task type, calc avg days
+    // Build data: for each BA × task type, calc avg working days using audit-based start
     const avgData = members.map(u=>{
       const byType={};
       usedTypes.forEach(tt=>{
-        const done=allT.filter(t=>t.ba_id===u.id&&t.task_type===tt&&t.status==='Completed'&&t.created_at&&t.updated_at);
-        byType[tt]=done.length?Math.round(done.reduce((s,t)=>s+workingDays(t.created_at,t.updated_at,u.id),0)/done.length):null;
+        const done=allT.filter(t=>t.ba_id===u.id&&t.task_type===tt&&t.status==='Completed');
+        byType[tt]=done.length?Math.round(done.reduce((s,t)=>{
+          const {actualStart,actualEnd}=getTaskActualDates(t,auditEntries);
+          return s+workingDays(actualStart,actualEnd,u.id);
+        },0)/done.length):null;
       });
       return{name:u.name,byType};
     });
@@ -3021,7 +3464,7 @@ async function executeClearTasks(mode){
     if(error)throw error;
     modal.remove();
     await loadBase();
-    showToast(mode==='all'?'All tasks cleared':'Completed tasks cleared','success');
+    notify(mode==='all'?'All tasks cleared':'Completed tasks cleared','Data has been removed from the system','success',5000);
     renderTasks();
   }catch(e){
     btn.textContent='Delete failed — try again';
@@ -3037,7 +3480,7 @@ async function savePriorityMultipliers(){
     if(val) await sb.from('workload_settings').upsert({key:k,value:val});
   }
   await loadBase();
-  showToast('Priority multipliers saved','success');
+  notify('Settings saved','Priority multipliers updated','success');
 }
 
 async function saveThresholds(){
@@ -3047,7 +3490,7 @@ async function saveThresholds(){
     if(val) await sb.from('workload_settings').upsert({key,value:val});
   }
   await loadBase();
-  showToast('Thresholds saved','success');
+  notify('Settings saved','Thresholds updated','success');
 }
 
 async function saveWeightage(){
@@ -3057,7 +3500,7 @@ async function saveWeightage(){
     if(val) await sb.from('workload_settings').upsert({key,value:val});
   }
   await loadBase();
-  showToast('Weightage saved','success');
+  notify('Settings saved','Task type weights updated','success');
 }
 
 async function saveStateHolidays(){
@@ -3067,7 +3510,7 @@ async function saveStateHolidays(){
   // Invalidate holiday cache
   Object.keys(_holidayCache).forEach(k=>delete _holidayCache[k]);
   await loadBase();
-  showToast('State holidays saved','success');
+  notify('Settings saved','State holidays updated','success');
 }
 
 function onAIProviderChange(){
@@ -3129,7 +3572,7 @@ function saveAIConfig(){
     if(key){localStorage.setItem('custom_ai_key',key);CUSTOM_AI_KEY=key;}
     else{localStorage.removeItem('custom_ai_key');CUSTOM_AI_KEY='';}
   }
-  showToast('AI config saved','success');
+  notify('AI settings saved','Your AI configuration has been updated','success');
 }
 
 function toggleKeyVis(){
