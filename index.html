@@ -272,7 +272,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
     <label class="fl">Work email</label>
     <input type="email" class="fi" id="loginEmail" placeholder="yourname@myeg.com.my" oninput="this.style.borderColor='';document.getElementById('loginError').textContent=''" onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()">
     <label class="fl">PIN</label>
-    <input type="password" class="fi" id="loginPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono);font-size:20px" oninput="this.style.borderColor='';document.getElementById('loginError').textContent=''" onkeydown="if(event.key==='Enter')tryLogin()">
+    <input type="password" class="fi" id="loginPin" maxlength="6" placeholder="••••••" style="letter-spacing:6px;font-family:var(--mono);font-size:20px" oninput="this.style.borderColor='';document.getElementById('loginError').textContent=''" onkeydown="if(event.key==='Enter')tryLogin()">
     <button class="btn-p" onclick="tryLogin()">Sign in →</button>
     <div class="lerr" id="loginError"></div>
   </div>
@@ -351,7 +351,10 @@ tr:hover td{background:rgba(255,255,255,.012)}
         <input type="url" class="finp" id="tProofUrl" placeholder="https://drive.google.com/...">
         <div class="fhint" id="proofUrlHint">GDrive link to signed document required for User Story Doc / CR Addendum Doc</div>
       </div>
-      <div class="ff"><label class="flb">Remarks <span class="opt">(optional)</span></label><textarea class="fta" id="tRemarks" placeholder="Blockers, notes, Jira links..."></textarea></div>
+      <div class="ff" id="commentsInModal" style="display:none">
+        <label class="flb">Comments / Remarks</label>
+        <div style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:var(--rs);padding:8px 10px;border:1px solid var(--border)">💬 Comments are managed in the task's remarks thread. Save the task first, then use the 💬 button on the task row to add comments.</div>
+      </div>
     </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('taskModal')">Cancel</button><button class="btn btn-a" onclick="saveTask()" id="saveTaskBtn">Save task</button></div>
   </div>
@@ -418,7 +421,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
       <div class="ff"><label class="flb">Full name</label><input type="text" class="finp" id="uName" placeholder="e.g. Shahidah"></div>
       <div class="ff"><label class="flb">Work email</label><input type="email" class="finp" id="uEmail" placeholder="shahidah@myeg.com.my"></div>
       <div class="fr2">
-        <div class="ff"><label class="flb">PIN (4 digits)</label><input type="password" class="finp" id="uPin" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-family:var(--mono)">
+        <div class="ff"><label class="flb">PIN (6 digits)</label><input type="password" class="finp" id="uPin" maxlength="6" placeholder="••••••" style="letter-spacing:6px;font-family:var(--mono)">
           <div class="fhint" id="pinHint">Required for new accounts</div></div>
         <div class="ff"><label class="flb">Role</label><select class="fsel" id="uRoleId"></select></div>
       </div>
@@ -434,14 +437,30 @@ tr:hover td{background:rgba(255,255,255,.012)}
   </div>
 </div>
 
+<!-- ═══ RESET PIN (Admin) ═══ -->
+<div class="mo" id="resetPinModal">
+  <div class="modal" style="width:360px">
+    <div class="mh"><div class="mtt">🔑 Reset PIN</div><button class="mx" onclick="CM('resetPinModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="resetPinUserId">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.85rem">Resetting PIN for: <strong id="resetPinUserName"></strong></div>
+      <div style="font-size:11.5px;color:var(--amber);background:var(--abg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(246,166,35,.2)">⚠ Set a temporary 6-digit PIN. The user must change it after their next login.</div>
+      <div class="ff"><label class="flb">Temporary PIN <span style="color:var(--red)">*</span></label><input type="password" class="finp" id="resetPinVal" maxlength="6" placeholder="••••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"><div class="fhint">Must be 6 digits. Share this PIN with the user securely.</div></div>
+      <div class="ff"><label class="flb">Confirm PIN <span style="color:var(--red)">*</span></label><input type="password" class="finp" id="resetPinVal2" maxlength="6" placeholder="••••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div id="resetPinErr" style="font-size:11px;color:var(--red);min-height:14px"></div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('resetPinModal')">Cancel</button><button class="btn btn-a" onclick="confirmResetPIN()">Reset PIN</button></div>
+  </div>
+</div>
+
 <!-- ═══ CHANGE PIN ═══ -->
 <div class="mo" id="pinModal">
   <div class="modal" style="width:340px">
     <div class="mh"><div class="mtt">Change my PIN</div><button class="mx" onclick="CM('pinModal')">✕</button></div>
     <div class="mb">
-      <div class="ff"><label class="flb">Current PIN</label><input type="password" class="finp" id="curPin" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
-      <div class="ff"><label class="flb">New PIN</label><input type="password" class="finp" id="newPin1" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
-      <div class="ff"><label class="flb">Confirm new PIN</label><input type="password" class="finp" id="newPin2" maxlength="4" placeholder="••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div class="ff"><label class="flb">Current PIN</label><input type="password" class="finp" id="curPin" maxlength="6" placeholder="••••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div class="ff"><label class="flb">New PIN</label><input type="password" class="finp" id="newPin1" maxlength="6" placeholder="••••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
+      <div class="ff"><label class="flb">Confirm new PIN</label><input type="password" class="finp" id="newPin2" maxlength="6" placeholder="••••••" style="text-align:center;font-size:20px;letter-spacing:6px;font-family:var(--mono)"></div>
       <div id="pinErr" style="font-size:11px;color:var(--red);min-height:14px"></div>
     </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('pinModal')">Cancel</button><button class="btn btn-a" onclick="savePin()">Update PIN</button></div>
@@ -617,6 +636,10 @@ const ALL_PERMS = [
   {key:'override_completed_task',label:'Override completed tasks'},
   {key:'view_metrics',label:'View rework metrics'},
   {key:'manage_settings',label:'Manage task weightage settings'},
+  {key:'reset_user_pin',label:'Reset user PIN'},
+  {key:'edit_task_type',label:'Change task type on existing tasks'},
+  {key:'edit_task_assignee',label:'Reassign tasks to another person'},
+  {key:'edit_task_project',label:'Move task to a different project'},
 ];
 
 // Workload complexity weights
@@ -640,7 +663,7 @@ function userPerms() {
     // fallback to legacy role field
     const legacyMap = {
       manager: ALL_PERMS.map(p=>p.key), // all perms
-      assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','create_project','edit_project','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload'],
+      assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','edit_task_type','edit_task_assignee','edit_task_project','create_project','edit_project','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload'],
       ba: ['view_dashboard','view_kpi_own','create_task_own','edit_task_own','view_team_board'],
     };
     return legacyMap[CU.role] || ['view_kpi_own','create_task_own','edit_task_own','view_team_board'];
@@ -712,8 +735,8 @@ async function tryLogin() {
     pinEl.focus();
     return;
   }
-  if (pin.length < 4) {
-    err.textContent = 'PIN must be 4 digits.';
+  if (pin.length < 6) {
+    err.textContent = 'PIN must be 6 digits.';
     pinEl.style.borderColor = 'var(--red)';
     pinEl.focus();
     return;
@@ -932,7 +955,10 @@ async function renderMyTasks() {
   el.innerHTML = `
     <div class="phr">
       <div><div class="pt">My tasks</div><div class="ps">Your weekly task list</div></div>
-      <button class="btn btn-a" onclick="openAddTask('${CU.id}')">+ Add task</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g" onclick="exportMyTasks()">⬇ Export</button>
+        <button class="btn btn-a" onclick="openAddTask('${CU.id}')">+ Add task</button>
+      </div>
     </div>
     <div class="mrow">
       <div class="mc gd"><div class="mv">${sc['In Progress']||0}</div><div class="ml">In progress</div></div>
@@ -960,6 +986,84 @@ async function renderMyTasks() {
   window._myTasks = T;
   window._mtFlags = {late:false,soon:false};
   applyMTFilters();
+}
+
+async function exportMyTasks(){
+  const T = window._myTasks || [];
+  if(!T.length){ showToast('No tasks to export','error'); return; }
+
+  const PRIORITY_ORDER = {'Very High':1,'High':2,'Medium':3,'Low':4};
+  const STATUS_ORDER = {'In Progress':1,'To Do':2,'Review':3,'Pending':4,'On Hold':5,'Completed':6,'Cancelled':7};
+
+  // Sheet 1 — Active tasks (sorted by priority then ETA)
+  const active = T
+    .filter(t=>!["Completed","Cancelled"].includes(t.status))
+    .sort((a,b)=>{
+      const pd=(PRIORITY_ORDER[a.priority||"Medium"]||3)-(PRIORITY_ORDER[b.priority||"Medium"]||3);
+      if(pd!==0)return pd;
+      return (a.eta||"9999").localeCompare(b.eta||"9999");
+    })
+    .map(t=>({
+      "Project":t.project_name||"—",
+      "Task Type":t.task_type||"—",
+      "Description":t.description||"—",
+      "Priority":t.priority||"Medium",
+      "Status":t.status||"—",
+      "ETA":t.eta||"—",
+      "Start Date":t.start_date||"—",
+      "Late":OD(t.eta,t.status)?"YES":"",
+      "Rework Count":t.rework_count||0,
+      "Proof URL":t.proof_url||"—",
+    }));
+
+  // Sheet 2 — All tasks including completed/cancelled (sorted by status then ETA)
+  const all = T
+    .sort((a,b)=>{
+      const sd=(STATUS_ORDER[a.status]||9)-(STATUS_ORDER[b.status]||9);
+      if(sd!==0)return sd;
+      return (a.eta||"9999").localeCompare(b.eta||"9999");
+    })
+    .map(t=>({
+      "Project":t.project_name||"—",
+      "Task Type":t.task_type||"—",
+      "Description":t.description||"—",
+      "Priority":t.priority||"Medium",
+      "Status":t.status||"—",
+      "ETA":t.eta||"—",
+      "Start Date":t.start_date||"—",
+      "Late":OD(t.eta,t.status)?"YES":"",
+      "Rework Count":t.rework_count||0,
+      "Proof URL":t.proof_url||"—",
+    }));
+
+  // Sheet 3 — Summary by status
+  const summary = Object.entries(
+    T.reduce((acc,t)=>{ acc[t.status]=(acc[t.status]||0)+1; return acc; },{})
+  )
+  .sort((a,b)=>(STATUS_ORDER[a[0]]||9)-(STATUS_ORDER[b[0]]||9))
+  .map(([status,count])=>({"Status":status,"Count":count}));
+  // Add totals row
+  summary.push({"Status":"TOTAL","Count":T.length});
+
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.json_to_sheet(active.length?active:[{"Note":"No active tasks"}]);
+  ws1["!cols"]=[{wch:22},{wch:22},{wch:40},{wch:12},{wch:14},{wch:12},{wch:12},{wch:6},{wch:8},{wch:35}];
+
+  const ws2 = XLSX.utils.json_to_sheet(all.length?all:[{"Note":"No tasks"}]);
+  ws2["!cols"]=[{wch:22},{wch:22},{wch:40},{wch:12},{wch:14},{wch:12},{wch:12},{wch:6},{wch:8},{wch:35}];
+
+  const ws3 = XLSX.utils.json_to_sheet(summary);
+  ws3["!cols"]=[{wch:18},{wch:8}];
+
+  XLSX.utils.book_append_sheet(wb, ws1, "Active Tasks");
+  XLSX.utils.book_append_sheet(wb, ws2, "All Tasks");
+  XLSX.utils.book_append_sheet(wb, ws3, "Summary");
+
+  const date = new Date().toISOString().slice(0,10);
+  const name = CU.name.replace(/\s+/g,"_");
+  XLSX.writeFile(wb, `Tasks_${name}_${date}.xlsx`);
+  notify("Export ready", "Your tasks have been exported to Excel", "success", 5000);
 }
 
 function toggleMTFlag(flag){
@@ -1033,7 +1137,7 @@ function buildTT(tasks,filter,baId,canEdit) {
         : `<td><span class="badge ${SC(t.status)?'b-'+SC(t.status).replace('s-',''):''}" style="font-size:10px">${t.status}</span></td>`;
     return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
       ${ba}
-      <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${almostDue&&!od?` <span class="fp fpd">DUE SOON</span>`:''}${startAlert?` <span class="fp" style="background:rgba(77,166,255,0.15);color:var(--blue)">START</span>`:''}</td>
+      <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${!od&&t.was_late&&!['Completed','Cancelled'].includes(t.status)?` <span class="fp fpl" title="Was late when moved to review">LATE ↩</span>`:''}${almostDue&&!od?` <span class="fp fpd">DUE SOON</span>`:''}${startAlert?` <span class="fp" style="background:rgba(77,166,255,0.15);color:var(--blue)">START</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
@@ -1096,14 +1200,84 @@ async function setStat(tid,ns){
     const today=new Date(new Date().toDateString());
     const etaMissing=!t.eta;
     const etaPast=t.eta&&new Date(t.eta)<today;
+    // If coming from Review on a DOC_TYPE, prompt for rework reason category first
+    if(t.status==='Review'&&DOC_TYPES.includes(t.task_type)){
+      promptReworkReason(tid,t,ns,etaMissing,etaPast);
+      return;
+    }
     await promptNewETA(tid,t,ns,etaMissing,etaPast);
     return;
   }
   await _applySetStat(tid,t,ns);
 }
 
+// Prompt for rework reason when Review → In Progress on DOC_TYPE tasks
+function promptReworkReason(tid,t,ns,etaMissing,etaPast){
+  document.getElementById('_reworkReasonMo')?.remove();
+  const mo=document.createElement('div');
+  mo.className='mo open';
+  mo.id='_reworkReasonMo';
+  mo.innerHTML=`<div class="modal" style="width:460px">
+    <div class="mh"><span class="mtt">↩ Reason for sending back to In Progress</span><button class="mx" onclick="document.getElementById('_reworkReasonMo')?.remove();refreshPage()">×</button></div>
+    <div class="mb">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.85rem">Why is this task being moved back from Review? This determines whether quality KPI is affected.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:.85rem">
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border2);cursor:pointer" onclick="selectReworkReason(this,'ba_amendment')">
+          <input type="radio" name="reworkReason" value="ba_amendment" style="margin-top:2px;accent-color:var(--red)">
+          <div><div style="font-size:12px;font-weight:600;color:var(--red)">🔴 BA amendment</div><div style="font-size:11px;color:var(--text2);margin-top:2px">Output did not meet requirements — BA needs to correct the work. Rework count will increase.</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border2);cursor:pointer" onclick="selectReworkReason(this,'stakeholder_feedback')">
+          <input type="radio" name="reworkReason" value="stakeholder_feedback" style="margin-top:2px;accent-color:var(--amber)">
+          <div><div style="font-size:12px;font-weight:600;color:var(--amber)">🟡 Stakeholder feedback</div><div style="font-size:11px;color:var(--text2);margin-top:2px">Reviewer requested changes. BA is responsible for better pre-validation. Rework count will increase.</div></div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border2);cursor:pointer" onclick="selectReworkReason(this,'scope_change')">
+          <input type="radio" name="reworkReason" value="scope_change" style="margin-top:2px;accent-color:var(--blue)">
+          <div><div style="font-size:12px;font-weight:600;color:var(--blue)">🔵 Scope change / Management direction</div><div style="font-size:11px;color:var(--text2);margin-top:2px">Requirement changed externally — not the BA's fault. Rework count will NOT increase. ETA will be reset.</div></div>
+        </label>
+      </div>
+      <div class="ff">
+        <label class="flb">Additional notes <span class="opt">(optional)</span></label>
+        <textarea class="fta" id="reworkReasonNote" rows="2" placeholder="e.g. PM requested different user flow, stakeholder changed acceptance criteria..."></textarea>
+      </div>
+      <div id="reworkReasonErr" style="font-size:11px;color:var(--red);min-height:14px"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('_reworkReasonMo')?.remove();refreshPage()">Cancel</button>
+      <button class="btn btn-a" onclick="confirmReworkReason()">Continue →</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  window._pendingReworkTask={tid,t,ns,etaMissing,etaPast};
+}
+
+function selectReworkReason(label,val){
+  document.querySelectorAll('[onclick*="selectReworkReason"]').forEach(el=>{
+    el.style.borderColor='var(--border2)';el.style.background='var(--surface2)';
+  });
+  label.style.borderColor='var(--accent)';label.style.background='var(--ag)';
+  label.querySelector('input').checked=true;
+}
+
+async function confirmReworkReason(){
+  const {tid,t,ns,etaMissing,etaPast}=window._pendingReworkTask||{};
+  if(!tid){showToast('Session error — please try again','error');return;}
+  const selected=document.querySelector('input[name="reworkReason"]:checked');
+  const err=document.getElementById('reworkReasonErr');
+  if(!selected){err.textContent='Please select a reason.';return;}
+  const reason=selected.value;
+  const note=document.getElementById('reworkReasonNote')?.value?.trim()||'';
+  const isScopeChange=reason==='scope_change';
+  // Store rework reason so _applySetStat knows whether to increment
+  window._pendingReworkTask.reworkReason=reason;
+  window._pendingReworkTask.reworkNote=note;
+  window._pendingReworkTask.skipRework=isScopeChange;
+  document.getElementById('_reworkReasonMo')?.remove();
+  // Scope change always forces ETA prompt (etaPast=true to force new date)
+  await promptNewETA(tid,t,ns,etaMissing||isScopeChange,etaPast||isScopeChange,reason,note);
+}
+
 // Prompt for ETA + reason whenever moving any task to In Progress
-function promptNewETA(tid,t,ns,etaMissing,etaPast){
+function promptNewETA(tid,t,ns,etaMissing,etaPast,reworkReason,reworkNote){
   // Remove any existing prompt
   document.getElementById('_etaPromptMo')?.remove();
   const today=new Date().toISOString().split('T')[0];
@@ -1139,12 +1313,11 @@ function promptNewETA(tid,t,ns,etaMissing,etaPast){
     </div>
   </div>`;
   document.body.appendChild(mo);
-  window._pendingEtaTask={tid,t,ns};
+  window._pendingEtaTask={tid,t,ns,reworkReason:reworkReason||window._pendingReworkTask?.reworkReason,reworkNote:reworkNote||window._pendingReworkTask?.reworkNote,skipRework:window._pendingReworkTask?.skipRework};
 }
 
 async function confirmNewETA(){
-  // Read task context from window store — avoids passing complex objects via onclick attributes
-  const {tid, t} = window._pendingEtaTask || {};
+  const {tid, t, reworkReason, reworkNote, skipRework} = window._pendingEtaTask || {};
   if(!tid || !t){ showToast('Session error — please try again','error'); return; }
   const newEta=document.getElementById('newEtaInput')?.value;
   const reason=document.getElementById('newEtaReason')?.value?.trim();
@@ -1152,24 +1325,30 @@ async function confirmNewETA(){
   if(!reason){showToast('Please provide a reason','error');return;}
   const today=new Date(new Date().toDateString());
   if(new Date(newEta)<today){showToast('ETA must be today or a future date','error');return;}
-  // Close the prompt modal
   document.getElementById('_etaPromptMo')?.remove();
-  // Log ETA change only if ETA actually changed
   if(newEta!==t.eta){
     const editCount=(t.eta_edit_count||0)+1;
     const delta=t.eta?Math.round((new Date(newEta)-new Date(t.eta))/86400000):null;
     const flag=delta===null?'edited':delta>0?'delayed':delta<0?'expedited':'edited';
     await sb.from('tasks').update({eta:newEta,eta_edit_count:editCount,updated_at:new Date().toISOString()}).eq('id',tid);
-    await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,reason);
+    const auditReason=reworkReason?`${reason} [${reworkReason}${reworkNote?' — '+reworkNote:''}]`:reason;
+    await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,auditReason);
   }
-  // Apply status change with reason recorded in audit
-  await _applySetStat(tid,{...t,eta:newEta},'In Progress',reason);
+  const fullReason=reworkReason?`${reason} [${reworkReason}${reworkNote?' — '+reworkNote:''}]`:reason;
+  await _applySetStat(tid,{...t,eta:newEta},'In Progress',fullReason,skipRework);
+  // Clear rework context
+  window._pendingReworkTask=null;
 }
 
-async function _applySetStat(tid,t,ns,reason){
+async function _applySetStat(tid,t,ns,reason,skipRework){
   let updates={status:ns,updated_at:new Date().toISOString()};
-  // Silent rework tracking: Review → In Progress for DOC_TYPE
-  if(DOC_TYPES.includes(t.task_type)&&t.status==='Review'&&ns==='In Progress'){
+  // Persist was_late flag: if leaving In Progress and task was already past ETA, record it
+  if(t.status==='In Progress'&&t.eta&&new Date(t.eta)<new Date(new Date().toDateString())){
+    updates.was_late=true;
+  }
+  // Rework tracking: Review → In Progress for DOC_TYPE
+  // skipRework=true means scope change — don't penalise quality KPI
+  if(DOC_TYPES.includes(t.task_type)&&t.status==='Review'&&ns==='In Progress'&&!skipRework){
     updates.rework_count=(t.rework_count||0)+1;
   }
   // Re-lock: moving to Completed or Cancelled revokes any override
@@ -1198,8 +1377,11 @@ function openAddTask(baId, projId='') {
   document.getElementById('tType').value='User Story Doc'; document.getElementById('tDesc').value='';
   document.getElementById('tEta').value=''; document.getElementById('tStartDate').value='';
   document.getElementById('tStatus').value='To Do'; document.getElementById('tPriority').value='Medium';
-  document.getElementById('tRemarks').value=''; document.getElementById('tProofUrl').value='';
+  document.getElementById('tProofUrl').value='';
   document.getElementById('tEtaReason').value=''; document.getElementById('tOnHoldReason').value='';
+  // Hide comments note for new tasks (no ID yet)
+  const commentsDiv=document.getElementById('commentsInModal');
+  if(commentsDiv) commentsDiv.style.display='none';
   window._editingTask=null;
   populateAssignee(baId); populateProjDrop(baId,projId); onTaskTypeChange(); onStatusChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Add task';
@@ -1213,10 +1395,60 @@ async function openEditTask(tid){
   document.getElementById('tType').value=t.task_type; document.getElementById('tDesc').value=t.description;
   document.getElementById('tEta').value=t.eta||''; document.getElementById('tStartDate').value=t.start_date||'';
   document.getElementById('tStatus').value=t.status; document.getElementById('tPriority').value=t.priority||'Medium';
-  document.getElementById('tRemarks').value=t.remarks||''; document.getElementById('tProofUrl').value=t.proof_url||'';
+  document.getElementById('tProofUrl').value=t.proof_url||'';
   document.getElementById('tEtaReason').value=''; document.getElementById('tOnHoldReason').value=t.on_hold_reason||'';
+  // Show comments note for existing tasks
+  const commentsDiv=document.getElementById('commentsInModal');
+  if(commentsDiv) commentsDiv.style.display='block';
   populateAssignee(t.ba_id); populateProjDrop(t.ba_id,t.project_id||''); onTaskTypeChange(); onStatusChange(); OM('taskModal');
   document.getElementById('taskModalTitle').textContent='Edit task';
+
+  // ── Field locking via granular permissions ──
+  const canEditType     = can('edit_task_type');
+  const canEditAssignee = can('edit_task_assignee');
+  const canEditProject  = can('edit_task_project');
+  const isInProgressOrBeyond = ['In Progress','Review','Pending','On Hold','Completed','Cancelled'].includes(t.status);
+
+  // Helper to lock a field with a visual locked label
+  function lockField(selId){
+    const el=document.getElementById(selId);
+    if(!el) return;
+    el.disabled=true;
+    el.style.opacity='0.55';
+    el.style.cursor='not-allowed';
+    const lbl=el.closest('.ff')?.querySelector('.flb');
+    if(lbl&&!lbl.querySelector('.lock-badge')){
+      lbl.innerHTML+=` <span class="lock-badge">🔒 locked</span>`;
+    }
+  }
+  function unlockField(selId){
+    const el=document.getElementById(selId);
+    if(!el) return;
+    el.disabled=false; el.style.opacity=''; el.style.cursor='';
+    const lbl=el.closest('.ff')?.querySelector('.flb');
+    if(lbl) lbl.querySelectorAll('.lock-badge').forEach(b=>b.remove());
+  }
+
+  // Task Type — controlled by edit_task_type permission
+  canEditType ? unlockField('tType') : lockField('tType');
+
+  // Assigned To — controlled by edit_task_assignee permission
+  canEditAssignee ? unlockField('tAssignee') : lockField('tAssignee');
+
+  // Project — controlled by edit_task_project permission
+  // Even with permission, lock if status is In Progress or beyond (data integrity)
+  if(!canEditProject || isInProgressOrBeyond){
+    lockField('tProjSel');
+    if(canEditProject && isInProgressOrBeyond){
+      // Has permission but status prevents it — show different hint
+      const lbl=document.getElementById('tProjSel')?.closest('.ff')?.querySelector('.flb');
+      if(lbl&&!lbl.querySelector('.lock-badge')){
+        lbl.innerHTML+=` <span class="lock-badge" title="Task already in progress — project cannot be changed">🔒 in progress</span>`;
+      }
+    }
+  } else {
+    unlockField('tProjSel');
+  }
 }
 
 function onTaskTypeChange(){
@@ -1349,7 +1581,6 @@ async function saveTask(){
   const startDate=document.getElementById('tStartDate').value||null;
   const status=document.getElementById('tStatus').value;
   const priority=document.getElementById('tPriority').value||'Medium';
-  const remarks=document.getElementById('tRemarks').value.trim();
   const proofUrl=document.getElementById('tProofUrl').value.trim()||null;
   const etaReason=document.getElementById('tEtaReason').value.trim()||null;
   const onHoldReason=document.getElementById('tOnHoldReason').value.trim()||null;
@@ -1417,7 +1648,13 @@ async function saveTask(){
   try{
     if(id){
       const {data:oldTask}=await sb.from('tasks').select('*').eq('id',id).single();
-      let updates={ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,remarks,proof_url:proofUrl,updated_at:new Date().toISOString()};
+      const isInProgressOrBeyond=['In Progress','Review','Pending','On Hold','Completed','Cancelled'].includes(oldTask.status);
+      // Enforce field locks via permissions — always use original value if user lacks the permission
+      const safeType    = can('edit_task_type')                          ? type     : oldTask.task_type;
+      const safeBaId    = can('edit_task_assignee')                      ? baId     : oldTask.ba_id;
+      const safeProjId  = (can('edit_task_project')&&!isInProgressOrBeyond) ? projId  : oldTask.project_id;
+      const safeProjName= (can('edit_task_project')&&!isInProgressOrBeyond) ? projName: oldTask.project_name;
+      let updates={ba_id:safeBaId,project_id:safeProjId,project_name:safeProjName,task_type:safeType,description:desc,eta,start_date:startDate,status,priority,proof_url:proofUrl,updated_at:new Date().toISOString()};
       // On Hold reason
       if(status==='On Hold'&&onHoldReason) updates.on_hold_reason=onHoldReason;
       if(status!=='On Hold') updates.on_hold_reason=null;
@@ -1438,10 +1675,15 @@ async function saveTask(){
           showToast(`ETA auto-adjusted +${pausedDays} day${pausedDays!==1?'s':''} to account for paused time`,'info');
         }
       }
-      // Silent rework: Review → In Progress for US/CR docs
+      // Silent rework: Review → In Progress for US/CR docs — but NOT if scope change
       if(DOC_TYPES.includes(type)&&oldTask.status==='Review'&&status==='In Progress'){
-        updates.rework_count=(oldTask.rework_count||0)+1;
-        await logA(id,baId,'rework_count',String(oldTask.rework_count||0),String(updates.rework_count),'rework',null);
+        // Check if this was triggered via the rework reason flow
+        const skipRework=window._pendingReworkTask?.skipRework;
+        if(!skipRework){
+          updates.rework_count=(oldTask.rework_count||0)+1;
+          await logA(id,baId,'rework_count',String(oldTask.rework_count||0),String(updates.rework_count),'rework',null);
+        }
+        window._pendingReworkTask=null;
       }
       await sb.from('tasks').update(updates).eq('id',id);
       // ETA change audit — include reason and increment eta_edit_count
@@ -1462,7 +1704,7 @@ async function saveTask(){
       }
       notify('Task updated','Changes saved successfully','success');
     }else{
-      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,remarks,proof_url:proofUrl,rework_count:0,eta_edit_count:0,total_paused_days:0,on_hold_reason:onHoldReason||null}).select().single();
+      const {data:nt}=await sb.from('tasks').insert({ba_id:baId,project_id:projId,project_name:projName,task_type:type,description:desc,eta,start_date:startDate,status,priority,proof_url:proofUrl,rework_count:0,eta_edit_count:0,total_paused_days:0,on_hold_reason:onHoldReason||null}).select().single();
       await logA(nt.id,baId,'created','',status,'created',null);
       notify('Task added',`"${desc.slice(0,60)}" added to ${projName}`,'success');
     }
@@ -2389,14 +2631,20 @@ async function renderMyKPI(){
   const avgTypeRows=Object.entries(s.avgByType||{});
   const avgTypeBlock=avgTypeRows.length?`
     <div style="margin:.75rem 0;padding:.65rem;background:var(--surface2);border-radius:var(--rs)">
-      <div style="font-size:9.5px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Avg working days to complete — by task type</div>
-      <div style="font-size:9px;color:var(--text3);margin-bottom:8px">From first In Progress → Completed. Excludes weekends, holidays, and leave.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:5px">
+      <div style="font-size:9.5px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Avg working days by task type</div>
+      <div style="font-size:9px;color:var(--text3);margin-bottom:8px">BA delivery = In Progress → first Review &nbsp;|&nbsp; End-to-end = In Progress → Completed. Excludes weekends, holidays, leave.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px">
         ${avgTypeRows.map(([tt,d])=>{
           const col=d==null?'var(--text3)':d<=3?'var(--green)':d<=7?'var(--blue)':d<=14?'var(--amber)':'var(--red)';
-          return`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 7px;background:var(--surface1);border-radius:4px;border:1px solid var(--border)">
-            <span style="font-size:10px;color:var(--text2)">${tt}</span>
-            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${col}">${d!=null?d+'d':'—'}</span>
+          const deliv=s.avgDeliveryByType?.[tt];
+          const lag=(d!=null&&deliv!=null)?d-deliv:null;
+          return`<div style="padding:5px 8px;background:var(--surface);border-radius:4px;border:1px solid var(--border)">
+            <div style="font-size:10px;color:var(--text2);margin-bottom:4px;font-weight:500">${tt}</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${deliv!=null?`<span style="font-size:9.5px;color:var(--text3)">BA delivery: <span style="font-family:var(--mono);font-weight:700;color:${deliv<=3?'var(--green)':deliv<=7?'var(--blue)':deliv<=14?'var(--amber)':'var(--red)'}">${deliv}d</span></span>`:''}
+              <span style="font-size:9.5px;color:var(--text3)">End-to-end: <span style="font-family:var(--mono);font-weight:700;color:${col}">${d!=null?d+'d':'—'}</span></span>
+              ${lag!=null&&lag>0?`<span style="font-size:9px;color:var(--text3);background:var(--surface3);padding:1px 5px;border-radius:3px">+${lag}d review lag</span>`:''}
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -2426,8 +2674,17 @@ async function renderMyKPI(){
 function calcKPI(ba,tasks,auditEntries){
   const bt=tasks.filter(t=>t.ba_id===ba.id);
   const done=bt.filter(t=>t.status==='Completed'&&t.task_type!==MEETING_TYPE);
-  // Timeliness — null/empty if no completed tasks
-  const onTime=done.filter(t=>!t.eta||new Date(t.eta)>=new Date(t.updated_at)).length;
+  // Timeliness — compare ETA vs first Review OR first Completed (whichever came first)
+  // This ensures review lag doesn't penalise the BA
+  const onTime=done.filter(t=>{
+    if(!t.eta) return true; // no ETA set = not penalised
+    const ta=(auditEntries||[]).filter(e=>e.task_id===t.id&&e.field_name==='status');
+    const deliveryEntry=ta
+      .filter(e=>['Review','Completed'].includes(e.new_value))
+      .sort((a,b)=>new Date(a.changed_at)-new Date(b.changed_at))[0];
+    const deliveredAt=deliveryEntry?.changed_at||t.updated_at;
+    return new Date(t.eta)>=new Date(deliveredAt);
+  }).length;
   const hasCompleted=done.length>0;
   const timeliness=hasCompleted?Math.round(onTime/done.length*100):null;
   // Quality — based on completed DOC_TYPE tasks, first-pass rate via rework_count
@@ -2439,14 +2696,32 @@ function calcKPI(ba,tasks,auditEntries){
   // Avg completion time per task type — working days from first In Progress → first Completed (via audit log)
   // Show ALL task types that have at least one completed task (not just this period)
   const avgByType={};
+  const avgDeliveryByType={}; // In Progress → first Review (BA's own speed)
   TASK_TYPES.filter(tt=>tt!==MEETING_TYPE).forEach(tt=>{
     const typed=done.filter(t=>t.task_type===tt);
-    if(!typed.length) return; // skip task types with no completed tasks — omit from display
+    if(!typed.length) return;
+    // End-to-end: In Progress → Completed
     const total=typed.reduce((s,t)=>{
       const {actualStart,actualEnd}=getTaskActualDates(t,auditEntries);
       return s+workingDays(actualStart,actualEnd,ba.id);
     },0);
     avgByType[tt]=Math.round(total/typed.length);
+    // BA delivery: In Progress → first Review (skip if task never went to Review)
+    const withReview=typed.filter(t=>{
+      const ta=(auditEntries||[]).filter(e=>e.task_id===t.id&&e.field_name==='status');
+      return ta.some(e=>e.new_value==='Review');
+    });
+    if(withReview.length){
+      const delivTotal=withReview.reduce((s,t)=>{
+        const ta=(auditEntries||[]).filter(e=>e.task_id===t.id&&e.field_name==='status');
+        const ipEntry=ta.sort((a,b)=>new Date(a.changed_at)-new Date(b.changed_at)).find(e=>e.new_value==='In Progress');
+        const rvEntry=ta.sort((a,b)=>new Date(a.changed_at)-new Date(b.changed_at)).find(e=>e.new_value==='Review');
+        const start=ipEntry?.changed_at||(t.start_date||t.created_at);
+        const end=rvEntry?.changed_at||t.updated_at;
+        return s+workingDays(start,end,ba.id);
+      },0);
+      avgDeliveryByType[tt]=Math.round(delivTotal/withReview.length);
+    }
   });
   // Rework rate — reworked completed docs ÷ total completed docs
   const reworkRate=hasDocs?Math.round(reworkCount/docs.length*100):null;
@@ -2463,7 +2738,7 @@ function calcKPI(ba,tasks,auditEntries){
   if(timeliness!=null&&timeliness<75)notes.push('Frequent ETA slippage — check audit log');
   if(atRisk.length)notes.push(`${atRisk.length} task${atRisk.length!==1?'s':''} at risk (ETA ≤2 days)`);
   if(!hasCompleted&&!hasDocs)notes.push('No completed doc tasks this period — KPI pending');
-  return{id:ba.id,name:ba.name,quality,timeliness,qScore,tScore,total,passCount,reworkCount,reworkRate,onTime,totalCompleted:done.length,avgByType,atRisk,notes,hasDocs,hasCompleted};
+  return{id:ba.id,name:ba.name,quality,timeliness,qScore,tScore,total,passCount,reworkCount,reworkRate,onTime,totalCompleted:done.length,avgByType,avgDeliveryByType,atRisk,notes,hasDocs,hasCompleted};
 }
 function KC(p){return p>=85?'var(--green)':p>=70?'var(--blue)':p>=55?'var(--amber)':'var(--red)';}
 function RLbl(s){return s>=90?'Excellent':s>=75?'Good':s>=60?'Needs improvement':'Critical';}
@@ -2733,9 +3008,9 @@ async function renderRoles(){
 function buildPermGrid(selected=[]){
   const groups=[
     {label:'Dashboard & overview',keys:['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','view_audit_log','view_workload','use_ai_advisor']},
-    {label:'Tasks',keys:['create_task_own','create_task_any','edit_task_own','edit_task_any','delete_task','mark_review_result']},
+    {label:'Tasks',keys:['create_task_own','create_task_any','edit_task_own','edit_task_any','delete_task','mark_review_result','edit_task_type','edit_task_assignee','edit_task_project']},
     {label:'Projects',keys:['create_project','edit_project','delete_project']},
-    {label:'Team & settings',keys:['manage_users','manage_roles','import_data','view_team_board']},
+    {label:'Team & settings',keys:['manage_users','manage_roles','import_data','view_team_board','reset_user_pin','override_completed_task','manage_settings']},
   ];
   return groups.map(g=>`
     <div style="margin-bottom:.75rem">
@@ -2827,6 +3102,7 @@ async function renderAdmin(){
             <button class="btn btn-sm" style="background:var(--surface2);color:var(--accent);border:1px solid var(--accent)" onclick="openAddLeave('${u.id}','${u.name}')">📅 Leave</button>
             <span class="badge" style="background:var(--ag);color:var(--accent)">${r?.name||u.role||'BA'}</span>
             <button class="btn btn-g btn-sm" onclick="openEditUser('${u.id}')">Edit</button>
+            ${can('reset_user_pin')&&u.id!==CU.id?`<button class="btn btn-sm" style="background:var(--abg);color:var(--amber);border:1px solid rgba(246,166,35,.3)" onclick="openResetPIN('${u.id}','${u.name}')">🔑 Reset PIN</button>`:''}
             ${u.id!==CU.id?`<button class="btn btn-d btn-sm" onclick="delUser('${u.id}','${u.name}')">Remove</button>`:''}
           </div>
         </div>`;
@@ -2952,10 +3228,10 @@ async function saveUser(){
   const roleId=document.getElementById('uRoleId').value;
   const hideFromNonMgr=document.getElementById('uHideFromNonMgr').checked;
   if(!name||!email){showToast('Name and email required','error');return;}
-  if(!id&&(pin.length!==4||!/^\d{4}$/.test(pin))){showToast('4-digit PIN required','error');return;}
+  if(!id&&(pin.length!==6||!/^\d{6}$/.test(pin))){showToast('6-digit PIN required','error');return;}
   if(id){
     const upd={name,email,role_id:roleId,hide_from_non_managers:hideFromNonMgr};
-    if(pin.length===4)upd.pin_hash=pin;
+    if(pin.length===6)upd.pin_hash=pin;
     await sb.from('users').update(upd).eq('id',id);
     if(CU.id===id){CU={...CU,...upd};sessionStorage.setItem('ba_user',JSON.stringify(CU));}
     notify('Member updated','Profile changes saved successfully','success');
@@ -2988,12 +3264,38 @@ async function savePin(){
   const err=document.getElementById('pinErr');
   err.textContent='';
   if(cur!==CU.pin_hash){err.textContent='Current PIN incorrect.';return;}
-  if(!/^\d{4}$/.test(p1)){err.textContent='New PIN must be 4 digits.';return;}
+  if(!/^\d{6}$/.test(p1)){err.textContent='New PIN must be 6 digits.';return;}
   if(p1!==p2){err.textContent='PINs do not match.';return;}
   if(p1===cur){err.textContent='New PIN must differ.';return;}
   await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
   CU.pin_hash=p1;sessionStorage.setItem('ba_user',JSON.stringify(CU));
   CM('pinModal');notify('PIN updated','Your PIN has been changed successfully','success');
+}
+
+function openResetPIN(userId, userName){
+  if(!can('reset_user_pin')){showToast('No permission to reset PINs','error');return;}
+  document.getElementById('resetPinUserId').value=userId;
+  document.getElementById('resetPinUserName').textContent=userName;
+  document.getElementById('resetPinVal').value='';
+  document.getElementById('resetPinVal2').value='';
+  document.getElementById('resetPinErr').textContent='';
+  OM('resetPinModal');
+  setTimeout(()=>document.getElementById('resetPinVal').focus(),100);
+}
+
+async function confirmResetPIN(){
+  const userId=document.getElementById('resetPinUserId').value;
+  const pin=document.getElementById('resetPinVal').value.trim();
+  const pin2=document.getElementById('resetPinVal2').value.trim();
+  const err=document.getElementById('resetPinErr');
+  err.textContent='';
+  if(!/^\d{6}$/.test(pin)){err.textContent='PIN must be exactly 6 digits.';return;}
+  if(pin!==pin2){err.textContent='PINs do not match.';return;}
+  const {error}=await sb.from('users').update({pin_hash:pin}).eq('id',userId);
+  if(error){err.textContent='Failed to reset PIN. Try again.';return;}
+  await loadBase();
+  CM('resetPinModal');
+  notify('PIN reset','Temporary PIN has been set. Share it with the user securely.','success',6000);
 }
 
 
