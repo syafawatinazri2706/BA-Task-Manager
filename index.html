@@ -1091,79 +1091,81 @@ async function setStat(tid,ns){
     if(sel)sel.value=t.status;
     return;
   }
-  // When resuming from paused (On Hold/Pending/Review) → In Progress,
-  // check if ETA is missing or already past → prompt BA for a new ETA
-  const pausedStatuses=['Pending','Review','On Hold'];
-  if(pausedStatuses.includes(t.status)&&ns==='In Progress'){
+  // Any status → In Progress always prompts for ETA + reason
+  if(ns==='In Progress'){
     const today=new Date(new Date().toDateString());
     const etaMissing=!t.eta;
     const etaPast=t.eta&&new Date(t.eta)<today;
-    if(etaMissing||etaPast){
-      // Show inline ETA prompt modal
-      await promptNewETA(tid,t,ns,etaMissing);
-      return;
-    }
+    await promptNewETA(tid,t,ns,etaMissing,etaPast);
+    return;
   }
   await _applySetStat(tid,t,ns);
 }
 
-// Prompt the BA to input a new ETA when resuming to In Progress with stale/missing ETA
-function promptNewETA(tid,t,ns,etaMissing){
-  return new Promise(resolve=>{
-    const reason=etaMissing?'No ETA was set for this task.':'The ETA has already passed.';
-    const mo=document.createElement('div');
-    mo.className='mo open';
-    mo.innerHTML=`<div class="modal" style="width:420px">
-      <div class="mh"><span class="mtt">📅 New ETA required</span><button class="mx" onclick="this.closest('.mo').remove();resolve()">×</button></div>
-      <div class="mb">
-        <div style="font-size:12px;color:var(--amber);background:var(--abg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(246,166,35,.2)">
-          ⚠ ${reason} Please set a new ETA before resuming this task to <strong>In Progress</strong>.
-        </div>
-        <div class="ff">
-          <label class="flb">New ETA <span style="color:var(--red)">*</span></label>
-          <input type="date" class="finp" id="newEtaInput" min="${new Date().toISOString().split('T')[0]}">
-          <div class="fhint">Must be today or a future date</div>
-        </div>
-        <div class="ff">
-          <label class="flb">Reason <span style="color:var(--red)">*</span></label>
-          <textarea class="fta" id="newEtaReason" rows="2" placeholder="e.g. Task was on hold pending client input, resuming with revised timeline"></textarea>
-        </div>
+// Prompt for ETA + reason whenever moving any task to In Progress
+function promptNewETA(tid,t,ns,etaMissing,etaPast){
+  // Remove any existing prompt
+  document.getElementById('_etaPromptMo')?.remove();
+  const today=new Date().toISOString().split('T')[0];
+  let warningHtml='';
+  if(etaMissing){
+    warningHtml=`<div style="font-size:12px;color:var(--amber);background:var(--abg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(246,166,35,.2)">⚠ No ETA set — please set one before starting this task.</div>`;
+  } else if(etaPast){
+    warningHtml=`<div style="font-size:12px;color:var(--red);background:var(--rbg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(245,101,101,.2)">🔴 ETA has already passed (${t.eta}) — please set a new one.</div>`;
+  } else {
+    warningHtml=`<div style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid var(--border2)">Current ETA: <strong>${t.eta}</strong> — confirm or update below.</div>`;
+  }
+  const mo=document.createElement('div');
+  mo.className='mo open';
+  mo.id='_etaPromptMo';
+  mo.innerHTML=`<div class="modal" style="width:440px">
+    <div class="mh"><span class="mtt">📅 Confirm ETA &amp; Reason — Moving to In Progress</span><button class="mx" onclick="document.getElementById('_etaPromptMo')?.remove();refreshPage()">×</button></div>
+    <div class="mb">
+      ${warningHtml}
+      <div class="ff">
+        <label class="flb">ETA <span style="color:var(--red)">*</span></label>
+        <input type="date" class="finp" id="newEtaInput" value="${etaMissing||etaPast?'':t.eta||''}" min="${today}">
+        <div class="fhint">Set or confirm the completion target date</div>
       </div>
-      <div class="mf">
-        <button class="btn btn-g" onclick="this.closest('.mo').remove()">Cancel</button>
-        <button class="btn btn-a" id="newEtaSaveBtn" onclick="confirmNewETA('${tid}',${JSON.stringify(t).replace(/'/g,"&#39;")})">Confirm &amp; Resume</button>
+      <div class="ff">
+        <label class="flb">Reason for starting <span style="color:var(--red)">*</span></label>
+        <textarea class="fta" id="newEtaReason" rows="2" placeholder="e.g. Resuming after client approval received, starting fresh from To Do..."></textarea>
+        <div class="fhint" style="color:var(--text3)">This will be recorded in the task audit history</div>
       </div>
-    </div>`;
-    document.body.appendChild(mo);
-    // store context for confirmNewETA
-    window._pendingEtaTask={tid,t,ns};
-    resolve();
-  });
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('_etaPromptMo')?.remove();refreshPage()">Cancel</button>
+      <button class="btn btn-a" onclick="confirmNewETA('${tid}',${JSON.stringify(t).replace(/'/g,"&#39;")})">▶ Start task</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  window._pendingEtaTask={tid,t,ns};
 }
 
 async function confirmNewETA(tid,t){
   const newEta=document.getElementById('newEtaInput')?.value;
   const reason=document.getElementById('newEtaReason')?.value?.trim();
-  if(!newEta){showToast('Please select a new ETA date','error');return;}
-  if(!reason){showToast('Please provide a reason for the new ETA','error');return;}
+  if(!newEta){showToast('Please select an ETA date','error');return;}
+  if(!reason){showToast('Please provide a reason','error');return;}
   const today=new Date(new Date().toDateString());
   if(new Date(newEta)<today){showToast('ETA must be today or a future date','error');return;}
-  const mo=document.querySelector('.mo.open');
-  if(mo)mo.remove();
-  // Apply the ETA update + status change
-  const editCount=(t.eta_edit_count||0)+1;
-  const delta=t.eta?Math.round((new Date(newEta)-new Date(t.eta))/86400000):null;
-  const flag=delta===null?'edited':delta>0?'delayed':delta<0?'expedited':'edited';
-  await sb.from('tasks').update({eta:newEta,eta_edit_count:editCount,updated_at:new Date().toISOString()}).eq('id',tid);
-  await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,reason);
-  showToast(`ETA set to ${newEta}. Resuming task to In Progress.`,'info');
-  const ns='In Progress';
-  await _applySetStat(tid,{...t,eta:newEta},ns);
+  // Close the prompt modal
+  document.getElementById('_etaPromptMo')?.remove();
+  // Log ETA change only if ETA actually changed
+  if(newEta!==t.eta){
+    const editCount=(t.eta_edit_count||0)+1;
+    const delta=t.eta?Math.round((new Date(newEta)-new Date(t.eta))/86400000):null;
+    const flag=delta===null?'edited':delta>0?'delayed':delta<0?'expedited':'edited';
+    await sb.from('tasks').update({eta:newEta,eta_edit_count:editCount,updated_at:new Date().toISOString()}).eq('id',tid);
+    await logA(tid,t.ba_id,'eta',t.eta||'',newEta,flag,delta,reason);
+  }
+  // Always log the reason as a status-linked audit entry
+  await _applySetStat(tid,{...t,eta:newEta},'In Progress',reason);
 }
 
-async function _applySetStat(tid,t,ns){
+async function _applySetStat(tid,t,ns,reason){
   let updates={status:ns,updated_at:new Date().toISOString()};
-  // Silent rework tracking: Review → In Progress for US/CR
+  // Silent rework tracking: Review → In Progress for DOC_TYPE
   if(DOC_TYPES.includes(t.task_type)&&t.status==='Review'&&ns==='In Progress'){
     updates.rework_count=(t.rework_count||0)+1;
   }
@@ -1172,7 +1174,7 @@ async function _applySetStat(tid,t,ns){
     window._overrideIds.delete(tid);
   }
   await sb.from('tasks').update(updates).eq('id',tid);
-  await logA(tid,t.ba_id,'status',t.status,ns,'status_change',null);
+  await logA(tid,t.ba_id,'status',t.status,ns,'status_change',null,reason||null);
   if(updates.rework_count!==undefined) await logA(tid,t.ba_id,'rework_count',String(t.rework_count||0),String(updates.rework_count),'rework',null);
   notify('Status updated',`Task moved to ${ns}`,'success',3500); refreshPage();
 }
@@ -3072,7 +3074,7 @@ async function showTaskHistory(tid) {
         const ico=flagIcons[a.flag_type]||'⚪';
         const time=new Date(a.changed_at).toLocaleString('en-MY',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
         let detail='';
-        if(a.field_name==='status') detail=`<span style="color:var(--text3)">${a.old_value}</span> → <span style="color:var(--text);font-weight:500">${a.new_value}</span>`;
+        if(a.field_name==='status') detail=`<span style="color:var(--text3)">${a.old_value}</span> → <span style="color:var(--text);font-weight:500">${a.new_value}</span>${a.reason?` <span style="color:var(--text3);font-size:10px">· ${a.reason}</span>`:''}`;
         else if(a.field_name==='eta') detail=`ETA: <span style="color:var(--text3)">${a.old_value||'none'}</span> → <span style="font-weight:500">${a.new_value||'none'}</span>${a.days_delta?` <span style="color:${a.days_delta>0?'var(--red)':'var(--green)'}">(${a.days_delta>0?'+':''}${a.days_delta}d)</span>`:''}`;
         else if(a.field_name==='proof_url') detail=`Proof doc added`;
         else if(a.field_name==='rework_count') detail=`Rework count → ${a.new_value}`;
