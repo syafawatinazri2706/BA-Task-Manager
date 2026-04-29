@@ -1037,19 +1037,20 @@ function buildTT(tasks,filter,baId,canEdit) {
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
-      <td style="font-family:var(--mono);font-size:10.5px;${od?'color:var(--red);font-weight:500':''}">
-        ${t.start_date?('<div style="font-size:9px;color:var(--text3)">▶ '+t.start_date+'</div>'):''}
+      <td style="font-family:var(--mono);font-size:10px;${od?'color:var(--red);font-weight:500':'color:var(--text2)'}">
         ${t.eta||'—'}
         ${t.eta_edit_count>0?('<span style="background:var(--abg);color:var(--amber);font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:6px;margin-left:3px" title="ETA changed '+t.eta_edit_count+'x">✎'+t.eta_edit_count+'</span>'):''}
       </td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${t.start_date||'—'}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${(t.created_at||'').slice(0,10)||'—'}</td>
       ${statusCell}
       <td>${proofLink}</td>
       <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
     </tr>
-    <tr id="remarks-row-${t.id}" style="display:none"><td colspan="9" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
+    <tr id="remarks-row-${t.id}" style="display:none"><td colspan="11" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
   }).join('');
   const bah = baId==='all'?'<th>BA</th>':'';
-  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>ETA</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>ETA</th><th>Start Date</th><th>Created</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function buildSB(tid,cur,interactive){
@@ -1063,7 +1064,26 @@ function buildSB(tid,cur,interactive){
 async function setStat(tid,ns){
   const {data:t}=await sb.from('tasks').select('*').eq('id',tid).single();
   if(!t||t.status===ns)return;
-  // Block Completed for US/CR without proof_url
+  // DOC_TYPE strict status flow enforcement
+  if(DOC_TYPES.includes(t.task_type)){
+    const allowed={
+      'To Do':       ['In Progress','On Hold','Cancelled'],
+      'In Progress':  ['Review','On Hold','Pending','Cancelled'],
+      'Review':       ['In Progress','Completed','Cancelled'],
+      'Pending':      ['In Progress','On Hold','Cancelled','Completed'],
+      'On Hold':      ['In Progress','Cancelled'],
+      'Completed':    [],
+      'Cancelled':    []
+    };
+    const ok=allowed[t.status]||[];
+    if(!ok.includes(ns)){
+      showToast(`Doc task: cannot move from "${t.status}" to "${ns}". Allowed: ${ok.join(', ')||'none'}`, 'error');
+      const sel=document.querySelector(`select[onchange*="${tid}"]`);
+      if(sel)sel.value=t.status;
+      return;
+    }
+  }
+  // Block Completed for DOC_TYPE without proof_url
   if(ns==='Completed'&&DOC_TYPES.includes(t.task_type)&&!t.proof_url){
     showToast('Proof document URL required before completing this task','error');
     // reset dropdown
@@ -1222,17 +1242,30 @@ function onTaskTypeChange(){
   const etaWrap=document.getElementById('tEta')?.parentElement;
   if(etaWrap) etaWrap.style.display=isMeeting?'none':'';
 
-  // Status options — Meeting can only be To Do or Completed
+  // Status options — restrict based on task type and current status
   const statusSel=document.getElementById('tStatus');
   const currentStatus=statusSel.value;
+  const editingTask=window._editingTask;
   if(isMeeting){
     statusSel.innerHTML=`<option value="To Do">To Do</option><option value="Completed">Completed</option>`;
     if(!['To Do','Completed'].includes(currentStatus)) statusSel.value='To Do';
+  } else if(isDoc && editingTask){
+    // Strict flow: only show allowed next statuses + current
+    const docAllowed={
+      'To Do':       ['To Do','In Progress','On Hold','Cancelled'],
+      'In Progress':  ['In Progress','Review','On Hold','Pending','Cancelled'],
+      'Review':       ['Review','In Progress','Completed','Cancelled'],
+      'Pending':      ['Pending','In Progress','On Hold','Cancelled','Completed'],
+      'On Hold':      ['On Hold','In Progress','Cancelled'],
+      'Completed':    ['Completed'],
+      'Cancelled':    ['Cancelled']
+    };
+    const validStatuses=docAllowed[editingTask.status]||TASK_STATUSES;
+    statusSel.innerHTML=validStatuses.map(s=>`<option value="${s}">${s}</option>`).join('');
+    statusSel.value=validStatuses.includes(currentStatus)?currentStatus:editingTask.status;
   } else {
-    if(statusSel.options.length<5){
-      statusSel.innerHTML=TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
-      statusSel.value=currentStatus||'To Do';
-    }
+    statusSel.innerHTML=TASK_STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
+    statusSel.value=currentStatus||'To Do';
   }
   onStatusChange();
 }
@@ -1260,7 +1293,7 @@ function onStatusChange(){
     etaLabel.innerHTML='ETA <span style="color:var(--text3);font-weight:400;font-size:10px">(paused)</span>';
     etaHint.textContent='ETA is paused while task is '+status+'. Will resume when moved back to In Progress.';
     etaHint.style.color='var(--amber)';
-  } else if(isInProgress){
+  } else if(status==='In Progress'){
     etaInp.disabled=false; etaInp.style.opacity='1';
     etaLabel.innerHTML='ETA <span style="color:var(--red)">*</span>';
     etaHint.textContent='Required — completion target date';
@@ -1345,6 +1378,27 @@ async function saveTask(){
     return;
   }
 
+  // DOC_TYPE strict status flow enforcement in modal
+  if(id && DOC_TYPES.includes(type)){
+    const oldTask=window._editingTask;
+    if(oldTask && oldTask.status!==status){
+      const allowed={
+        'To Do':       ['In Progress','On Hold','Cancelled'],
+        'In Progress':  ['Review','On Hold','Pending','Cancelled'],
+        'Review':       ['In Progress','Completed','Cancelled'],
+        'Pending':      ['In Progress','On Hold','Cancelled','Completed'],
+        'On Hold':      ['In Progress','Cancelled'],
+        'Completed':    [],
+        'Cancelled':    []
+      };
+      const ok=allowed[oldTask.status]||[];
+      if(!ok.includes(status)){
+        showToast(`Doc task: cannot move from "${oldTask.status}" to "${status}". Allowed: ${ok.join(', ')||'none'}`, 'error');
+        document.getElementById('tStatus').value=oldTask.status;
+        return;
+      }
+    }
+  }
   // Proof URL mandatory for US/CR when Completing
   if(status==='Completed'&&DOC_TYPES.includes(type)&&!proofUrl){
     showToast('Proof document URL is required to complete a User Story Doc or CR Addendum Doc','error');
@@ -2031,11 +2085,9 @@ function toggleATFlag(flag){
 }
 
 function clearATFilters(){
-  const fields=['tSrch'];
-  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['tSrch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['fBA','fSt','fTy'].forEach(id=>{const el=document.getElementById(id);if(el)el.selectedIndex=0;});
-  const fe=document.getElementById('atEtaFrom'),te=document.getElementById('atEtaTo');
-  if(fe)fe.value='';if(te)te.value='';
+  ['atEtaFrom','atEtaTo','atCreatedFrom','atCreatedTo','atStartFrom','atStartTo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   window._atFlags={late:false,soon:false};
   document.getElementById('atLateBtn')?.classList.remove('active');
   document.getElementById('atDueSoonBtn')?.classList.remove('active');
@@ -2047,16 +2099,25 @@ function filterAT(){
   const bf=document.getElementById('fBA')?.value||'All';
   const sf=document.getElementById('fSt')?.value||'All';
   const tf=document.getElementById('fTy')?.value||'All';
-  const from=document.getElementById('atEtaFrom')?.value||'';
-  const to=document.getElementById('atEtaTo')?.value||'';
+  const etaFrom=document.getElementById('atEtaFrom')?.value||'';
+  const etaTo=document.getElementById('atEtaTo')?.value||'';
+  const createdFrom=document.getElementById('atCreatedFrom')?.value||'';
+  const createdTo=document.getElementById('atCreatedTo')?.value||'';
+  const startFrom=document.getElementById('atStartFrom')?.value||'';
+  const startTo=document.getElementById('atStartTo')?.value||'';
   const flags=window._atFlags||{late:false,soon:false};
   const f=_AT.filter(t=>{
     if(bf!=='All'&&t.ba_id!==bf)return false;
     if(sf!=='All'&&t.status!==sf)return false;
     if(tf!=='All'&&t.task_type!==tf)return false;
     if(q&&!t.project_name.toLowerCase().includes(q)&&!t.description.toLowerCase().includes(q))return false;
-    if(from&&t.eta&&t.eta<from)return false;
-    if(to&&t.eta&&t.eta>to)return false;
+    if(etaFrom&&t.eta&&t.eta<etaFrom)return false;
+    if(etaTo&&t.eta&&t.eta>etaTo)return false;
+    const cd=(t.created_at||'').slice(0,10);
+    if(createdFrom&&cd&&cd<createdFrom)return false;
+    if(createdTo&&cd&&cd>createdTo)return false;
+    if(startFrom&&t.start_date&&t.start_date<startFrom)return false;
+    if(startTo&&t.start_date&&t.start_date>startTo)return false;
     if(flags.late&&!OD(t.eta,t.status))return false;
     if(flags.soon&&!isAlmostDue(t.eta,t.status))return false;
     return true;
@@ -2371,11 +2432,11 @@ function calcKPI(ba,tasks,auditEntries){
   const hasDocs=docs.length>0;
   const quality=hasDocs?Math.round(passCount/docs.length*100):null;
   // Avg completion time per task type — working days from first In Progress → first Completed (via audit log)
+  // Show ALL task types that have at least one completed task (not just this period)
   const avgByType={};
-  const usedTaskTypes=[...new Set(done.map(t=>t.task_type))];
-  usedTaskTypes.forEach(tt=>{
+  TASK_TYPES.filter(tt=>tt!==MEETING_TYPE).forEach(tt=>{
     const typed=done.filter(t=>t.task_type===tt);
-    if(!typed.length){avgByType[tt]=null;return;}
+    if(!typed.length) return; // skip task types with no completed tasks — omit from display
     const total=typed.reduce((s,t)=>{
       const {actualStart,actualEnd}=getTaskActualDates(t,auditEntries);
       return s+workingDays(actualStart,actualEnd,ba.id);
@@ -3174,10 +3235,10 @@ function refreshAnalytics() {
     const d = new Date(t.created_at);
     return d >= fromD && d <= toD;
   });
-  drawAnalytics(members, filtered, created, from, to);
+  drawAnalytics(members, filtered, created, from, to, window._analyticsAudit||[]);
 }
 
-function drawAnalytics(members, tasks, createdTasks, from, to) {
+function drawAnalytics(members, tasks, createdTasks, from, to, auditEntries) {
   const body = document.getElementById('analyticsBody');
   if (!body) return;
   const colors = ['#7c6cfa','#3ecf8e','#f6a623','#4da6ff','#f56565','#a78bfa','#34d399','#fbbf24','#60a5fa','#f87171','#c084fc','#6ee7b7'];
@@ -3219,10 +3280,10 @@ function drawAnalytics(members, tasks, createdTasks, from, to) {
   });
   const wkLabels = Object.keys(weekBuckets).sort();
   const wkData = wkLabels.map(k => weekBuckets[k]);
-  // ── Chart 7: Review pass/rework rate ──
+  // ── Chart 7: Doc first-pass vs rework rate (using rework_count) ──
   const rvMembers = members.map(u => {
-    const docs = tasks.filter(t => t.ba_id===u.id && DOC_TYPES.includes(t.task_type) && t.review_result);
-    return { name: u.name, pass: docs.filter(t=>t.review_result==='Pass').length, rework: docs.filter(t=>t.review_result==='Rework').length };
+    const docs = tasks.filter(t => t.ba_id===u.id && DOC_TYPES.includes(t.task_type) && t.status==='Completed');
+    return { name: u.name, pass: docs.filter(t=>(t.rework_count||0)===0).length, rework: docs.filter(t=>(t.rework_count||0)>0).length };
   }).filter(u => u.pass+u.rework > 0);
 
   const labels = members.map(u => u.name.split(' ')[0]);
