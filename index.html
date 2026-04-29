@@ -1172,7 +1172,7 @@ async function setStat(tid,ns){
   if(DOC_TYPES.includes(t.task_type)){
     const allowed={
       'To Do':       ['In Progress','On Hold','Cancelled'],
-      'In Progress':  ['Review','On Hold','Pending','Cancelled'],
+      'In Progress':  ['Review','Completed','On Hold','Pending','Cancelled'],
       'Review':       ['In Progress','Completed','Cancelled'],
       'Pending':      ['In Progress','On Hold','Cancelled','Completed'],
       'On Hold':      ['In Progress','Cancelled'],
@@ -1187,12 +1187,9 @@ async function setStat(tid,ns){
       return;
     }
   }
-  // Block Completed for DOC_TYPE without proof_url
-  if(ns==='Completed'&&DOC_TYPES.includes(t.task_type)&&!t.proof_url){
-    showToast('Proof document URL required before completing this task','error');
-    // reset dropdown
-    const sel=document.querySelector(`select[onchange*="${tid}"]`);
-    if(sel)sel.value=t.status;
+  // DOC_TYPE completing — prompt for proof URL if not already set
+  if(ns==='Completed'&&DOC_TYPES.includes(t.task_type)){
+    promptProofUrl(tid,t);
     return;
   }
   // Any status → In Progress always prompts for ETA + reason
@@ -1209,6 +1206,58 @@ async function setStat(tid,ns){
     return;
   }
   await _applySetStat(tid,t,ns);
+}
+
+// Prompt for Proof URL when completing a DOC_TYPE task from the task list
+function promptProofUrl(tid, t){
+  document.getElementById('_proofUrlPromptMo')?.remove();
+  const hasExisting = !!t.proof_url;
+  const mo = document.createElement('div');
+  mo.className = 'mo open';
+  mo.id = '_proofUrlPromptMo';
+  mo.innerHTML = `<div class="modal" style="width:460px">
+    <div class="mh">
+      <span class="mtt">📄 Proof Document — Completing Task</span>
+      <button class="mx" onclick="document.getElementById('_proofUrlPromptMo')?.remove();refreshPage()">×</button>
+    </div>
+    <div class="mb">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.85rem">
+        <strong>${t.description}</strong><br>
+        <span style="font-size:11px;color:var(--text3)">${t.project_name} · ${t.task_type}</span>
+      </div>
+      ${hasExisting ? `<div style="font-size:11px;color:var(--green);background:var(--gbg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(62,207,142,.2)">✓ Existing proof URL: <a href="${t.proof_url}" target="_blank" style="color:var(--green)">${t.proof_url.slice(0,50)}${t.proof_url.length>50?'...':''}</a></div>` : `<div style="font-size:11px;color:var(--amber);background:var(--abg);border-radius:var(--rs);padding:8px 10px;margin-bottom:.85rem;border:1px solid rgba(246,166,35,.2)">⚠ No proof URL set — required to complete this task.</div>`}
+      <div class="ff">
+        <label class="flb">Proof / Document URL <span style="color:var(--red)">*</span></label>
+        <input type="url" class="finp" id="_proofUrlInput" value="${t.proof_url||''}" placeholder="https://drive.google.com/...">
+        <div class="fhint">GDrive or Confluence link to the signed/completed document</div>
+      </div>
+      <div id="_proofUrlErr" style="font-size:11px;color:var(--red);min-height:14px"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('_proofUrlPromptMo')?.remove();refreshPage()">Cancel</button>
+      <button class="btn btn-a" onclick="confirmCompleteWithProof()">✓ Mark as Completed</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  window._pendingCompleteTask = {tid, t};
+  setTimeout(()=>document.getElementById('_proofUrlInput')?.focus(), 100);
+}
+
+async function confirmCompleteWithProof(){
+  const {tid, t} = window._pendingCompleteTask || {};
+  if(!tid){ showToast('Session error — please try again','error'); return; }
+  const proofUrl = document.getElementById('_proofUrlInput')?.value?.trim();
+  const err = document.getElementById('_proofUrlErr');
+  if(!proofUrl){ err.textContent = 'Proof URL is required to complete this task.'; return; }
+  if(!proofUrl.startsWith('http')){ err.textContent = 'Please enter a valid URL starting with http.'; return; }
+  document.getElementById('_proofUrlPromptMo')?.remove();
+  // Save proof URL first if it changed
+  if(proofUrl !== t.proof_url){
+    await sb.from('tasks').update({proof_url: proofUrl, updated_at: new Date().toISOString()}).eq('id', tid);
+    await logA(tid, t.ba_id, 'proof_url', t.proof_url||'', proofUrl, 'edited', null);
+  }
+  await _applySetStat(tid, {...t, proof_url: proofUrl}, 'Completed');
+  window._pendingCompleteTask = null;
 }
 
 // Prompt for rework reason when Review → In Progress on DOC_TYPE tasks
@@ -1490,7 +1539,7 @@ function onTaskTypeChange(){
     // Strict flow: only show allowed next statuses + current
     const docAllowed={
       'To Do':       ['To Do','In Progress','On Hold','Cancelled'],
-      'In Progress':  ['In Progress','Review','On Hold','Pending','Cancelled'],
+      'In Progress':  ['In Progress','Review','Completed','On Hold','Pending','Cancelled'],
       'Review':       ['Review','In Progress','Completed','Cancelled'],
       'Pending':      ['Pending','In Progress','On Hold','Cancelled','Completed'],
       'On Hold':      ['On Hold','In Progress','Cancelled'],
@@ -1620,7 +1669,7 @@ async function saveTask(){
     if(oldTask && oldTask.status!==status){
       const allowed={
         'To Do':       ['In Progress','On Hold','Cancelled'],
-        'In Progress':  ['Review','On Hold','Pending','Cancelled'],
+        'In Progress':  ['Review','Completed','On Hold','Pending','Cancelled'],
         'Review':       ['In Progress','Completed','Cancelled'],
         'Pending':      ['In Progress','On Hold','Cancelled','Completed'],
         'On Hold':      ['In Progress','Cancelled'],
