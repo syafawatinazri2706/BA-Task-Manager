@@ -454,8 +454,8 @@ tr:hover td{background:rgba(255,255,255,.012)}
     <div class="mh"><div class="mtt" id="importModalTitle">Import data</div><button class="mx" onclick="CM('importModal')">✕</button></div>
     <div class="mb">
       <div class="ar" style="margin-bottom:1rem">
-        <button class="fc active" onclick="setImportType(this,'projects')">Projects</button>
-        <button class="fc" onclick="setImportType(this,'tasks')">Tasks</button>
+        <button class="fc active" onclick="setImpType(this,'projects')">Projects</button>
+        <button class="fc" onclick="setImpType(this,'tasks')">Tasks</button>
       </div>
       <div id="importGuide"></div>
       <div class="izn" id="importZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
@@ -468,7 +468,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
     </div>
     <div class="mf">
       <button class="btn btn-g" onclick="CM('importModal')">Cancel</button>
-      <button class="btn btn-g" onclick="downloadTemplate()" id="dlTplBtn">⬇ Download template</button>
+      <button class="btn btn-g" onclick="dlTemplate()" id="dlTplBtn">⬇ Download template</button>
       <button class="btn btn-a" onclick="confirmImport()" id="confirmImportBtn" style="display:none">Import data</button>
     </div>
   </div>
@@ -1305,9 +1305,9 @@ function onStatusChange(){
     etaHint.textContent='Leave blank if not yet scheduled';
     etaHint.style.color='var(--text3)';
   }
-  // Show ETA reason field if: editing an existing In Progress task and ETA has changed
-  // We check on save — but show the field proactively when editing In Progress
-  const showEtaReason = old && oldStatus==='In Progress' && status==='In Progress';
+  // Show ETA reason field if: editing an existing In Progress task — check against _editingTask
+  const _et = window._editingTask;
+  const showEtaReason = _et && _et.status==='In Progress' && status==='In Progress';
   etaReasonFF.style.display = showEtaReason ? 'block' : 'none';
   if(!showEtaReason) document.getElementById('tEtaReason').value='';
   // On Hold reason field
@@ -3266,10 +3266,11 @@ function drawAnalytics(members, tasks, createdTasks, from, to, auditEntries) {
     }, 0);
     return Math.round(total / done.length);
   });
-  // ── Chart 5: KPI scores per BA ──
+  // ── Chart 5: KPI scores per BA — uses ALL tasks (not date-filtered) for accurate scoring ──
+  const _allAudit = window._analyticsAudit || [];
   const kpiScores = members.map(u => {
-    const s = calcKPI(u, tasks, auditEntries);
-    return { name: u.name, quality: s.qScore, timeliness: s.tScore, coverage: s.cScore, total: s.total };
+    const s = calcKPI(u, window._analyticsData||[], _allAudit);
+    return { name: u.name, qScore: s.qScore||0, tScore: s.tScore||0, total: s.total };
   });
   // ── Chart 6: Completion trend over time (weekly buckets) ──
   const weekBuckets = {};
@@ -3341,8 +3342,8 @@ function drawAnalytics(members, tasks, createdTasks, from, to, auditEntries) {
   }
   // ch7 — KPI stacked (50/50)
   _charts.ch7 = new Chart(document.getElementById('ch7'),{type:'bar',data:{labels:kpiScores.map(s=>s.name.split(' ')[0]),datasets:[
-    {label:'Quality (50)',data:kpiScores.map(s=>s.quality!=null?s.qScore:0),backgroundColor:'#7c6cfa',borderRadius:2},
-    {label:'Timeliness (50)',data:kpiScores.map(s=>s.timeliness!=null?s.tScore:0),backgroundColor:'#3ecf8e',borderRadius:2},
+    {label:'Quality (50)',data:kpiScores.map(s=>s.qScore),backgroundColor:'#7c6cfa',borderRadius:2},
+    {label:'Timeliness (50)',data:kpiScores.map(s=>s.tScore),backgroundColor:'#3ecf8e',borderRadius:2},
   ]},options:{...opts,indexAxis:'y',plugins:{legend:{display:true,position:'top',labels:{color:'#8888a0',font:{size:10},boxWidth:10}}},scales:{x:{stacked:true,max:100,ticks:{color:'#8888a0',font:{size:10}}},y:{stacked:true,ticks:{color:'#8888a0',font:{size:10}}}}}});
 
   // ── Avg completion days by task type per BA ───────────────────────────
