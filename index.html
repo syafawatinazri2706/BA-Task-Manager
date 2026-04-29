@@ -971,11 +971,23 @@ async function renderMyTasks() {
         <div class="ar" style="margin-bottom:6px">
           ${['All',...TASK_STATUSES].map((s,i)=>`<button class="fc ${i===0?'active':''}" data-mt-status="${s}" onclick="applyMTFilters()">${s}</button>`).join('')}
         </div>
-        <div class="ar" style="margin-bottom:.85rem;gap:6px">
-          <span style="font-size:10.5px;color:var(--text3);font-weight:500;align-self:center">ETA</span>
-          <input type="date" class="si" id="mtEtaFrom" placeholder="From" style="width:130px" onchange="applyMTFilters()">
-          <span style="font-size:11px;color:var(--text3);align-self:center">→</span>
-          <input type="date" class="si" id="mtEtaTo" placeholder="To" style="width:130px" onchange="applyMTFilters()">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.85rem;align-items:center">
+          <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;min-width:52px">Created</span>
+          <input type="date" class="si" id="mtCreatedFrom" style="width:130px" onchange="applyMTFilters()">
+          <span style="font-size:11px;color:var(--text3)">→</span>
+          <input type="date" class="si" id="mtCreatedTo" style="width:130px" onchange="applyMTFilters()">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.85rem;align-items:center">
+          <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;min-width:52px">Start</span>
+          <input type="date" class="si" id="mtStartFrom" style="width:130px" onchange="applyMTFilters()">
+          <span style="font-size:11px;color:var(--text3)">→</span>
+          <input type="date" class="si" id="mtStartTo" style="width:130px" onchange="applyMTFilters()">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.85rem;align-items:center">
+          <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;min-width:52px">ETA</span>
+          <input type="date" class="si" id="mtEtaFrom" style="width:130px" onchange="applyMTFilters()">
+          <span style="font-size:11px;color:var(--text3)">→</span>
+          <input type="date" class="si" id="mtEtaTo" style="width:130px" onchange="applyMTFilters()">
           <button class="fc" id="mtLateBtn" onclick="toggleMTFlag('late')" title="Show only LATE tasks (In Progress past ETA)">🔴 Late</button>
           <button class="fc" id="mtDueSoonBtn" onclick="toggleMTFlag('soon')" title="Show only In Progress tasks due tomorrow (1 day before ETA)">🟡 Due soon</button>
           <button class="btn btn-g btn-sm" onclick="clearMTFilters()">Clear filters</button>
@@ -1076,8 +1088,9 @@ function toggleMTFlag(flag){
 
 function clearMTFilters(){
   document.querySelectorAll('#mtFilters .fc[data-mt-status]').forEach(b=>b.classList.toggle('active',b.dataset.mtStatus==='All'));
-  const fe=document.getElementById('mtEtaFrom'),te=document.getElementById('mtEtaTo');
-  if(fe)fe.value='';if(te)te.value='';
+  ['mtEtaFrom','mtEtaTo','mtStartFrom','mtStartTo','mtCreatedFrom','mtCreatedTo'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
   window._mtFlags={late:false,soon:false};
   document.getElementById('mtLateBtn')?.classList.remove('active');
   document.getElementById('mtDueSoonBtn')?.classList.remove('active');
@@ -1094,13 +1107,22 @@ function applyMTFilters(){
   document.querySelectorAll('#mtFilters .fc[data-mt-status]').forEach(b=>{
     b.classList.toggle('active',b.dataset.mtStatus===selStatus);
   });
-  // Date range
-  const from=document.getElementById('mtEtaFrom')?.value||'';
-  const to=document.getElementById('mtEtaTo')?.value||'';
+  // Date range filters
+  const etaFrom=document.getElementById('mtEtaFrom')?.value||'';
+  const etaTo=document.getElementById('mtEtaTo')?.value||'';
+  const startFrom=document.getElementById('mtStartFrom')?.value||'';
+  const startTo=document.getElementById('mtStartTo')?.value||'';
+  const createdFrom=document.getElementById('mtCreatedFrom')?.value||'';
+  const createdTo=document.getElementById('mtCreatedTo')?.value||'';
   const f=T.filter(t=>{
     if(selStatus!=='All'&&t.status!==selStatus)return false;
-    if(from&&(t.eta||'')&&t.eta<from)return false;
-    if(to&&(t.eta||'')&&t.eta>to)return false;
+    if(etaFrom&&(t.eta||'')&&t.eta<etaFrom)return false;
+    if(etaTo&&(t.eta||'')&&t.eta>etaTo)return false;
+    const cd=(t.created_at||'').slice(0,10);
+    if(createdFrom&&cd&&cd<createdFrom)return false;
+    if(createdTo&&cd&&cd>createdTo)return false;
+    if(startFrom&&(t.start_date||'')&&t.start_date<startFrom)return false;
+    if(startTo&&(t.start_date||'')&&t.start_date>startTo)return false;
     if(flags.late&&!OD(t.eta,t.status))return false;
     if(flags.soon&&!isAlmostDue(t.eta,t.status))return false;
     return true;
@@ -1137,16 +1159,16 @@ function buildTT(tasks,filter,baId,canEdit) {
         : `<td><span class="badge ${SC(t.status)?'b-'+SC(t.status).replace('s-',''):''}" style="font-size:10px">${t.status}</span></td>`;
     return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
       ${ba}
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${(t.created_at||'').slice(0,10)||'—'}</td>
       <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${!od&&t.was_late&&!['Completed','Cancelled'].includes(t.status)?` <span class="fp fpl" title="Was late when moved to review">LATE ↩</span>`:''}${almostDue&&!od?` <span class="fp fpd">DUE SOON</span>`:''}${startAlert?` <span class="fp" style="background:rgba(77,166,255,0.15);color:var(--blue)">START</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${t.start_date||'—'}</td>
       <td style="font-family:var(--mono);font-size:10px;${od?'color:var(--red);font-weight:500':'color:var(--text2)'}">
         ${t.eta||'—'}
         ${t.eta_edit_count>0?('<span style="background:var(--abg);color:var(--amber);font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:6px;margin-left:3px" title="ETA changed '+t.eta_edit_count+'x">✎'+t.eta_edit_count+'</span>'):''}
       </td>
-      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${t.start_date||'—'}</td>
-      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${(t.created_at||'').slice(0,10)||'—'}</td>
       ${statusCell}
       <td>${proofLink}</td>
       <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
@@ -1154,7 +1176,7 @@ function buildTT(tasks,filter,baId,canEdit) {
     <tr id="remarks-row-${t.id}" style="display:none"><td colspan="11" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
   }).join('');
   const bah = baId==='all'?'<th>BA</th>':'';
-  return `<div class="tw"><table><thead><tr>${bah}<th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>ETA</th><th>Start Date</th><th>Created</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="tw"><table><thead><tr>${bah}<th>Created</th><th>Project</th><th>Type</th><th>Priority</th><th>Description</th><th>Start Date</th><th>ETA</th><th>Status</th><th>Proof</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function buildSB(tid,cur,interactive){
