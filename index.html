@@ -48,7 +48,7 @@ input,select,textarea{font-family:var(--font)}
 .lerr{font-size:12px;color:var(--red);margin-top:6px;min-height:16px}
 #app{display:none;min-height:100vh}
 #app.visible{display:flex}
-.sidebar{width:var(--sb);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar{width:var(--sb);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow:hidden}
 .sbh{padding:.95rem .85rem;border-bottom:1px solid var(--border)}
 .sblogo{display:flex;align-items:center;gap:7px}
 .sbli{width:26px;height:26px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
@@ -64,7 +64,7 @@ input,select,textarea{font-family:var(--font)}
 .ni.active{background:var(--ag);color:var(--accent)}
 .niico{width:13px;height:13px;flex-shrink:0;opacity:.65}
 .ni.active .niico{opacity:1}
-.sbfoot{padding:.5rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:3px}
+.sbfoot{padding:.5rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:3px;flex-shrink:0}
 .sbfb{padding:5px 8px;background:transparent;border:1px solid var(--border2);border-radius:var(--rs);color:var(--text2);font-size:11px;cursor:pointer;transition:all var(--t);text-align:left}
 .sbfb:hover{background:var(--surface2);color:var(--text)}
 .main{margin-left:var(--sb);flex:1;padding:1.75rem;overflow-x:hidden;min-width:0}
@@ -433,6 +433,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
         </label>
         <div class="fhint">When enabled, only users with the Manager role can see this person's tasks, KPI, and workload data.</div>
       </div>
+    </div>
     <div class="mf"><button class="btn btn-g" onclick="CM('userModal')">Cancel</button><button class="btn btn-a" onclick="saveUser()">Save</button></div>
   </div>
 </div>
@@ -3330,9 +3331,10 @@ async function delUser(id,name){
 // CHANGE PIN
 // ══════════════════════════════════
 function openChangePIN(){
-  ['curPin','newPin1','newPin2'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('pinErr').textContent='';
-  OM('pinModal');setTimeout(()=>document.getElementById('curPin').focus(),100);
+  const ids=['curPin','newPin1','newPin2'];
+  for(const id of ids){const el=document.getElementById(id);if(el)el.value='';}
+  const errEl=document.getElementById('pinErr');if(errEl)errEl.textContent='';
+  OM('pinModal');setTimeout(()=>{const el=document.getElementById('curPin');if(el)el.focus();},100);
 }
 
 async function savePin(){
@@ -3354,13 +3356,16 @@ async function savePin(){
 
 function openResetPIN(userId, userName){
   if(!can('reset_user_pin')){showToast('No permission to reset PINs','error');return;}
-  document.getElementById('resetPinUserId').value=userId;
-  document.getElementById('resetPinUserName').textContent=userName;
-  document.getElementById('resetPinVal').value='';
-  document.getElementById('resetPinVal2').value='';
-  document.getElementById('resetPinErr').textContent='';
+  const uid=document.getElementById('resetPinUserId');
+  const unm=document.getElementById('resetPinUserName');
+  const rv=document.getElementById('resetPinVal');
+  const rv2=document.getElementById('resetPinVal2');
+  const re=document.getElementById('resetPinErr');
+  if(!uid||!unm||!rv||!rv2||!re){showToast('Modal not ready, please try again','error');return;}
+  uid.value=userId; unm.textContent=userName;
+  rv.value=''; rv2.value=''; re.textContent='';
   OM('resetPinModal');
-  setTimeout(()=>document.getElementById('resetPinVal').focus(),100);
+  setTimeout(()=>rv.focus(),100);
 }
 
 async function confirmResetPIN(){
