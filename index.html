@@ -3337,11 +3337,13 @@ async function savePin(){
   const p2=document.getElementById('newPin2').value;
   const err=document.getElementById('pinErr');
   err.textContent='';
+  if(!CU||!CU.pin_hash){err.textContent='Session error — please refresh and try again.';return;}
   if(cur!==CU.pin_hash){err.textContent='Current PIN incorrect.';return;}
   if(!/^\d{6}$/.test(p1)){err.textContent='New PIN must be 6 digits.';return;}
   if(p1!==p2){err.textContent='PINs do not match.';return;}
-  if(p1===cur){err.textContent='New PIN must differ.';return;}
-  await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
+  if(p1===cur){err.textContent='New PIN must differ from current PIN.';return;}
+  const {error}=await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
+  if(error){err.textContent='Failed to update PIN. Try again.';return;}
   CU.pin_hash=p1;sessionStorage.setItem('ba_user',JSON.stringify(CU));
   CM('pinModal');notify('PIN updated','Your PIN has been changed successfully','success');
 }
@@ -3540,7 +3542,6 @@ async function renderAnalytics() {
   const el = document.getElementById('pageAnalytics');
   if(!can('view_analytics')){el.innerHTML=`<div class="es">🔒 You don't have permission to view analytics.</div>`;return;}
   destroyCharts();
-  const el = document.getElementById('pageAnalytics');
   el.innerHTML = `<div class="lov"><div class="sp"></div></div>`;
   const [{ data: tasks }, { data: auditRaw }] = await Promise.all([
     sb.from('tasks').select('*').order('created_at', { ascending: true }),
