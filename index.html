@@ -615,6 +615,8 @@ const PROJ_STATUSES = ['Active CR','In Progress','On Hold','Maintenance','Cancel
 const ALL_PERMS = [
   {key:'view_dashboard',label:'View dashboard'},
   {key:'view_all_tasks',label:'View all tasks'},
+  {key:'view_analytics',label:'View analytics'},
+  {key:'view_projects',label:'View projects'},
   {key:'view_kpi_all',label:'View all KPIs'},
   {key:'view_kpi_own',label:'View own KPI'},
   {key:'create_task_own',label:'Create own tasks'},
@@ -663,8 +665,8 @@ function userPerms() {
     // fallback to legacy role field
     const legacyMap = {
       manager: ALL_PERMS.map(p=>p.key), // all perms
-      assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','edit_task_type','edit_task_assignee','edit_task_project','create_project','edit_project','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload'],
-      ba: ['view_dashboard','view_kpi_own','create_task_own','edit_task_own','view_team_board'],
+      assistant_manager: ['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','create_task_own','create_task_any','edit_task_own','edit_task_any','edit_task_type','edit_task_assignee','edit_task_project','create_project','edit_project','view_projects','view_audit_log','mark_review_result','view_team_board','use_ai_advisor','import_data','view_workload','view_analytics','view_metrics'],
+      ba: ['view_dashboard','view_kpi_own','create_task_own','edit_task_own','view_team_board','view_projects'],
     };
     return legacyMap[CU.role] || ['view_kpi_own','create_task_own','edit_task_own','view_team_board'];
   }
@@ -791,7 +793,7 @@ function buildNav() {
   const nav = document.getElementById('sbnav');
   let html = '';
   // Overview section (manager/AM)
-  if (can('view_dashboard') || can('view_kpi_all') || can('view_all_tasks') || can('view_audit_log') || can('view_workload') || can('use_ai_advisor')) {
+  if (can('view_dashboard') || can('view_kpi_all') || can('view_all_tasks') || can('view_audit_log') || can('view_workload') || can('use_ai_advisor') || can('view_analytics')) {
     html += `<div class="ns"><div class="nsl">Overview</div>`;
     if (can('view_dashboard')) html += niBtn('Dashboard','<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>','Dashboard');
     if (can('view_workload')) html += niBtn('Workload','<circle cx="8" cy="8" r="6"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="11" y1="6" x2="8" y2="8"/>','Workload radar');
@@ -799,7 +801,7 @@ function buildNav() {
     if (can('view_kpi_all')) html += niBtn('KPI','<polyline points="1,11 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>','KPI scores');
     if (can('view_all_tasks')) html += niBtn('AllTasks','<line x1="3" y1="4" x2="13" y2="4"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="12" x2="9" y2="12"/>','All tasks');
     if (can('view_audit_log')) html += niBtn('AuditLog','<circle cx="8" cy="8" r="6"/><polyline points="8,4 8,8 11,10"/>','Audit log');
-    if (can('view_dashboard')) html += niBtn('Analytics','<rect x="1" y="9" width="3" height="6"/><rect x="6" y="5" width="3" height="10"/><rect x="11" y="1" width="3" height="14"/>','Analytics');
+    if (can('view_analytics')) html += niBtn('Analytics','<rect x="1" y="9" width="3" height="6"/><rect x="6" y="5" width="3" height="10"/><rect x="11" y="1" width="3" height="14"/>','Analytics');
     html += `</div>`;
   }
   // My work
@@ -808,7 +810,7 @@ function buildNav() {
   html += niBtn('MyKPI','<polyline points="1,11 5,7 8,9 12,4 15,6"/><line x1="1" y1="15" x2="15" y2="15"/>','My KPI');
   html += `</div><div class="ns"><div class="nsl">Team</div>`;
   if (can('view_team_board')) html += niBtn('TeamBoard','<rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>','Team board');
-  html += niBtn('Projects','<rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/>','Projects');
+  if (can('view_projects')) html += niBtn('Projects','<rect x="1" y="3" width="14" height="11" rx="2"/><path d="M1 7h14"/>','Projects');
   html += `</div>`;
   // Settings
   if (can('manage_users') || can('manage_roles') || can('import_data')) {
@@ -2221,6 +2223,7 @@ function showBAT(card,baId){
 // ══════════════════════════════════
 async function renderProjects(){
   const el=document.getElementById('pageProjects');
+  if(!can('view_projects')){el.innerHTML=`<div class="es">🔒 You don't have permission to view projects.</div>`;return;}
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
   await loadBase();
   const canMgr=can('create_project');
@@ -3078,9 +3081,9 @@ async function renderRoles(){
 
 function buildPermGrid(selected=[]){
   const groups=[
-    {label:'Dashboard & overview',keys:['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','view_audit_log','view_workload','use_ai_advisor']},
+    {label:'Dashboard & overview',keys:['view_dashboard','view_all_tasks','view_kpi_all','view_kpi_own','view_audit_log','view_workload','use_ai_advisor','view_analytics','view_metrics']},
     {label:'Tasks',keys:['create_task_own','create_task_any','edit_task_own','edit_task_any','delete_task','mark_review_result','edit_task_type','edit_task_assignee','edit_task_project']},
-    {label:'Projects',keys:['create_project','edit_project','delete_project']},
+    {label:'Projects',keys:['view_projects','create_project','edit_project','delete_project']},
     {label:'Team & settings',keys:['manage_users','manage_roles','import_data','view_team_board','reset_user_pin','override_completed_task','manage_settings']},
   ];
   return groups.map(g=>`
@@ -3322,10 +3325,7 @@ async function delUser(id,name){
 // ══════════════════════════════════
 // CHANGE PIN
 // ══════════════════════════════════
-async function openChangePIN(){
-  if(!CU){showToast('Session error — please refresh','error');return;}
-  const {data:freshUser}=await sb.from('users').select('*').eq('id',CU.id).single();
-  if(freshUser){CU=freshUser;sessionStorage.setItem('ba_user',JSON.stringify(CU));}
+function openChangePIN(){
   ['curPin','newPin1','newPin2'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pinErr').textContent='';
   OM('pinModal');setTimeout(()=>document.getElementById('curPin').focus(),100);
@@ -3337,13 +3337,11 @@ async function savePin(){
   const p2=document.getElementById('newPin2').value;
   const err=document.getElementById('pinErr');
   err.textContent='';
-  if(!CU||!CU.pin_hash){err.textContent='Session error — please refresh and try again.';return;}
   if(cur!==CU.pin_hash){err.textContent='Current PIN incorrect.';return;}
   if(!/^\d{6}$/.test(p1)){err.textContent='New PIN must be 6 digits.';return;}
   if(p1!==p2){err.textContent='PINs do not match.';return;}
-  if(p1===cur){err.textContent='New PIN must differ from current PIN.';return;}
-  const {error}=await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
-  if(error){err.textContent='Failed to update PIN. Try again.';return;}
+  if(p1===cur){err.textContent='New PIN must differ.';return;}
+  await sb.from('users').update({pin_hash:p1}).eq('id',CU.id);
   CU.pin_hash=p1;sessionStorage.setItem('ba_user',JSON.stringify(CU));
   CM('pinModal');notify('PIN updated','Your PIN has been changed successfully','success');
 }
@@ -3539,6 +3537,8 @@ function destroyCharts() {
 }
 
 async function renderAnalytics() {
+  const el = document.getElementById('pageAnalytics');
+  if(!can('view_analytics')){el.innerHTML=`<div class="es">🔒 You don't have permission to view analytics.</div>`;return;}
   destroyCharts();
   const el = document.getElementById('pageAnalytics');
   el.innerHTML = `<div class="lov"><div class="sp"></div></div>`;
