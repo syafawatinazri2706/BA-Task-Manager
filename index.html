@@ -3322,7 +3322,10 @@ async function delUser(id,name){
 // ══════════════════════════════════
 // CHANGE PIN
 // ══════════════════════════════════
-function openChangePIN(){
+async function openChangePIN(){
+  if(!CU){showToast('Session error — please refresh','error');return;}
+  const {data:freshUser}=await sb.from('users').select('*').eq('id',CU.id).single();
+  if(freshUser){CU=freshUser;sessionStorage.setItem('ba_user',JSON.stringify(CU));}
   ['curPin','newPin1','newPin2'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pinErr').textContent='';
   OM('pinModal');setTimeout(()=>document.getElementById('curPin').focus(),100);
