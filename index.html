@@ -467,6 +467,27 @@ tr:hover td{background:rgba(255,255,255,.012)}
   </div>
 </div>
 
+<!-- ═══ LEAVE MODAL ═══ -->
+<div class="mo" id="leaveModal">
+  <div class="modal" style="width:440px">
+    <div class="mh"><div class="mtt" id="leaveModalTitle">Add leave</div><button class="mx" onclick="CM('leaveModal')">✕</button></div>
+    <div class="mb">
+      <input type="hidden" id="lBaId">
+      <div class="ff"><label class="flb">BA</label><input class="finp" id="lBaName" disabled></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="ff"><label class="flb">Start date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lStart" onchange="previewLeaveImpact()"></div>
+        <div class="ff"><label class="flb">End date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lEnd" onchange="previewLeaveImpact()"></div>
+      </div>
+      <div class="ff"><label class="flb">Reason <span class="opt">(optional)</span></label><input type="text" class="finp" id="lReason" placeholder="e.g. Annual leave, Medical leave..."></div>
+      <div id="lEtaAdjustInfo" style="display:none;background:var(--abg);border-radius:var(--rs);padding:.65rem;margin-top:.5rem">
+        <div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:4px">⚠ ETA auto-adjustment preview</div>
+        <div style="font-size:11px;color:var(--text2)" id="lEtaAdjustText"></div>
+      </div>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="CM('leaveModal')">Cancel</button><button class="btn btn-a" onclick="saveLeave()">Save leave</button></div>
+  </div>
+</div>
+
 <!-- ═══ IMPORT MODAL ═══ -->
 <div class="mo" id="importModal">
   <div class="modal" style="width:680px">
@@ -2227,7 +2248,8 @@ async function renderProjects(){
   el.innerHTML=`<div class="lov"><div class="sp"></div></div>`;
   await loadBase();
   const canMgr=can('create_project');
-  const visible=canMgr?AP:myProjects(CU.id);
+  const canViewAll=can('view_all_tasks')||canMgr;
+  const visible=canViewAll?AP:myProjects(CU.id);
   window._projVis=visible;
   el.innerHTML=`
     <div class="phr">
@@ -3182,24 +3204,6 @@ async function renderAdmin(){
         </div>`;
       }).join('')}
     </div>
-    <div class="modal" id="leaveModal">
-      <div class="mc" style="max-width:440px">
-        <div class="mh"><div class="mt" id="leaveModalTitle">Add leave</div><button class="mcl" onclick="CM('leaveModal')">×</button></div>
-        <div class="mb">
-          <input type="hidden" id="lBaId">
-          <div class="ff"><label class="flb">BA</label><input class="finp" id="lBaName" disabled></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div class="ff"><label class="flb">Start date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lStart" onchange="previewLeaveImpact()"></div>
-            <div class="ff"><label class="flb">End date <span style="color:var(--red)">*</span></label><input type="date" class="finp" id="lEnd" onchange="previewLeaveImpact()"></div>
-          </div>
-          <div class="ff"><label class="flb">Reason <span class="opt">(optional)</span></label><input type="text" class="finp" id="lReason" placeholder="e.g. Annual leave, Medical leave..."></div>
-          <div id="lEtaAdjustInfo" style="display:none;background:var(--abg);border-radius:var(--rs);padding:.65rem;margin-top:.5rem">
-            <div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:4px">⚠ ETA auto-adjustment preview</div>
-            <div style="font-size:11px;color:var(--text2)" id="lEtaAdjustText"></div>
-          </div>
-        </div>
-        <div class="mf"><button class="btn btn-g" onclick="CM('leaveModal')">Cancel</button><button class="btn btn-a" onclick="saveLeave()">Save leave</button></div>
-      </div>
     </div>`;}
 
 function openAddLeave(baId, baName){
