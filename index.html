@@ -526,6 +526,7 @@ const SUPABASE_URL = 'https://zerezgqzwpkjjwmitvkq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplcmV6Z3F6d3Bramp3bWl0dmtxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzM2MDgsImV4cCI6MjA5MjQ0OTYwOH0.Vzv3TA2E7C7p5ZQd22GOUj8ak4r38XUkF0aUt9WUSTQ';
 let ANTHROPIC_KEY = localStorage.getItem('anthropic_api_key') || '';
 let AI_PROVIDER = localStorage.getItem('ai_provider') || 'claude'; // claude | gemini | openai | custom
+let AI_MODEL = localStorage.getItem('ai_model') || '';
 let GEMINI_KEY = localStorage.getItem('gemini_api_key') || '';
 let OPENAI_KEY = localStorage.getItem('openai_api_key') || '';
 let CUSTOM_AI_URL = localStorage.getItem('custom_ai_url') || '';
@@ -2079,21 +2080,23 @@ async function buildAIContext(){
 
 async function callAI(systemPrompt, messages, maxTokens=1000){
   const provider=AI_PROVIDER||localStorage.getItem('ai_provider')||'claude';
+  const model=AI_MODEL||localStorage.getItem('ai_model')||'';
   if(provider==='claude'){
     if(!ANTHROPIC_KEY)throw new Error('no_key');
+    const useModel=model||'claude-sonnet-4-20250514';
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:maxTokens,system:systemPrompt,messages})
+      headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:useModel,max_tokens:maxTokens,system:systemPrompt,messages})
     });
     const d=await res.json();
     if(d.error)throw new Error(d.error.message||'API error');
     return d.content?.[0]?.text||'';
   } else if(provider==='gemini'){
     if(!GEMINI_KEY)throw new Error('no_key');
-    // Gemini 1.5 Flash via REST
+    const useModel=model||'gemini-2.5-flash';
     const geminiMsgs=messages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${GEMINI_KEY}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -2107,10 +2110,11 @@ async function callAI(systemPrompt, messages, maxTokens=1000){
     return d.candidates?.[0]?.content?.parts?.[0]?.text||'';
   } else if(provider==='openai'){
     if(!OPENAI_KEY)throw new Error('no_key');
+    const useModel=model||'gpt-4o';
     const res=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${OPENAI_KEY}`},
-      body:JSON.stringify({model:'gpt-4o',max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...messages]})
+      body:JSON.stringify({model:useModel,max_tokens:maxTokens,messages:[{role:'system',content:systemPrompt},...messages]})
     });
     const d=await res.json();
     if(d.error)throw new Error(d.error.message||'OpenAI error');
@@ -3972,6 +3976,18 @@ function onAIProviderChange(){
   const provider=document.getElementById('ws_ai_provider')?.value||'claude';
   const fields=document.getElementById('aiKeyFields');
   if(!fields)return;
+  const savedModel=localStorage.getItem('ai_model')||'';
+  const modelSection=`
+    <div class="ff" style="max-width:480px;margin-top:.65rem">
+      <label class="flb">Model <span class="opt">(fetched live from provider)</span></label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select class="fsel" id="ws_ai_model" style="flex:1;font-family:var(--mono);font-size:12px">
+          <option value="">— enter key then click Fetch —</option>
+        </select>
+        <button class="btn btn-sm btn-g" id="fetchModelsBtn" onclick="fetchModelsForProvider()" style="min-width:64px;white-space:nowrap">Fetch models</button>
+      </div>
+      <div id="modelFetchStatus" style="font-size:11px;color:var(--text3);margin-top:3px"></div>
+    </div>`;
   const keyEntry=(id,placeholder,stored,label)=>`
     <div class="ff" style="max-width:480px;margin-top:.65rem">
       <label class="flb">${label}</label>
@@ -3981,11 +3997,11 @@ function onAIProviderChange(){
       </div>
     </div>`;
   if(provider==='claude'){
-    fields.innerHTML=keyEntry('ws_ai_key_claude','sk-ant-api03-...',localStorage.getItem('anthropic_api_key'),'Anthropic API key');
+    fields.innerHTML=keyEntry('ws_ai_key_claude','sk-ant-api03-...',localStorage.getItem('anthropic_api_key'),'Anthropic API key')+modelSection;
   } else if(provider==='gemini'){
-    fields.innerHTML=keyEntry('ws_ai_key_gemini','AIza...',localStorage.getItem('gemini_api_key'),'Google Gemini API key');
+    fields.innerHTML=keyEntry('ws_ai_key_gemini','AIza...',localStorage.getItem('gemini_api_key'),'Google Gemini API key')+modelSection;
   } else if(provider==='openai'){
-    fields.innerHTML=keyEntry('ws_ai_key_openai','sk-...',localStorage.getItem('openai_api_key'),'OpenAI API key');
+    fields.innerHTML=keyEntry('ws_ai_key_openai','sk-...',localStorage.getItem('openai_api_key'),'OpenAI API key')+modelSection;
   } else if(provider==='custom'){
     fields.innerHTML=`
       <div class="ff" style="max-width:480px;margin-top:.65rem">
@@ -3993,6 +4009,69 @@ function onAIProviderChange(){
         <input type="url" class="finp" id="ws_ai_custom_url" value="${localStorage.getItem('custom_ai_url')||''}" placeholder="https://your-llm-endpoint.com/v1/chat/completions">
       </div>
       ${keyEntry('ws_ai_key_custom','Bearer token or API key',localStorage.getItem('custom_ai_key'),'API key / Bearer token')}`;
+    return; // no model fetch for custom
+  }
+  // If we already have a saved model, pre-populate the dropdown with it
+  if(savedModel){
+    const sel=document.getElementById('ws_ai_model');
+    if(sel){
+      sel.innerHTML=`<option value="${savedModel}" selected>${savedModel} (saved)</option><option value="">— fetch fresh list —</option>`;
+    }
+  }
+}
+
+async function fetchModelsForProvider(){
+  const provider=document.getElementById('ws_ai_provider')?.value||'claude';
+  const btn=document.getElementById('fetchModelsBtn');
+  const status=document.getElementById('modelFetchStatus');
+  const sel=document.getElementById('ws_ai_model');
+  if(!btn||!status||!sel)return;
+  btn.textContent='Fetching…';btn.disabled=true;
+  status.textContent='';
+  try{
+    let models=[];
+    if(provider==='gemini'){
+      const key=document.getElementById('ws_ai_key_gemini')?.value.trim()||localStorage.getItem('gemini_api_key')||'';
+      if(!key)throw new Error('Enter your Gemini API key first');
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=100`);
+      const d=await res.json();
+      if(d.error)throw new Error(d.error.message);
+      models=(d.models||[])
+        .filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+        .map(m=>m.name.replace('models/',''))
+        .sort();
+    } else if(provider==='claude'){
+      const key=document.getElementById('ws_ai_key_claude')?.value.trim()||localStorage.getItem('anthropic_api_key')||'';
+      if(!key)throw new Error('Enter your Anthropic API key first');
+      const res=await fetch('https://api.anthropic.com/v1/models',{
+        headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}
+      });
+      const d=await res.json();
+      if(d.error)throw new Error(d.error.message);
+      models=(d.data||[]).map(m=>m.id).sort().reverse();
+    } else if(provider==='openai'){
+      const key=document.getElementById('ws_ai_key_openai')?.value.trim()||localStorage.getItem('openai_api_key')||'';
+      if(!key)throw new Error('Enter your OpenAI API key first');
+      const res=await fetch('https://api.openai.com/v1/models',{
+        headers:{'Authorization':`Bearer ${key}`}
+      });
+      const d=await res.json();
+      if(d.error)throw new Error(d.error.message);
+      models=(d.data||[])
+        .map(m=>m.id)
+        .filter(id=>/^(gpt|o\d)/i.test(id))
+        .sort().reverse();
+    }
+    if(!models.length)throw new Error('No models returned');
+    const savedModel=localStorage.getItem('ai_model')||'';
+    sel.innerHTML=models.map(m=>`<option value="${m}" ${m===savedModel?'selected':''}>${m}</option>`).join('');
+    status.style.color='var(--green)';
+    status.textContent=`✓ ${models.length} models loaded`;
+  }catch(e){
+    status.style.color='var(--red)';
+    status.textContent='✗ '+e.message;
+  }finally{
+    btn.textContent='Fetch models';btn.disabled=false;
   }
 }
 
@@ -4007,6 +4086,12 @@ function saveAIConfig(){
   const provider=document.getElementById('ws_ai_provider')?.value||'claude';
   localStorage.setItem('ai_provider',provider);
   AI_PROVIDER=provider;
+  // Save selected model
+  const modelSel=document.getElementById('ws_ai_model');
+  if(modelSel&&modelSel.value){
+    localStorage.setItem('ai_model',modelSel.value);
+    AI_MODEL=modelSel.value;
+  }
   if(provider==='claude'){
     const v=document.getElementById('ws_ai_key_claude')?.value.trim();
     if(v){localStorage.setItem('anthropic_api_key',v);ANTHROPIC_KEY=v;}
