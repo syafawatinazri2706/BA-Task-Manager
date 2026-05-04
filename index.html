@@ -866,6 +866,7 @@ function navigateTo(page) {
 // HELPERS
 // ══════════════════════════════════
 function INI(name) { return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function fmtDate(d){ if(!d||d==='—')return '—'; const p=(d+'').slice(0,10).split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:d; }
 function OD(eta,status) {
   // LATE only applies to In Progress tasks past their ETA
   if (!eta||status!=='In Progress') return false;
@@ -930,9 +931,19 @@ function getTaskActualDates(task, auditEntries){
 function SC(s){return {'To Do':'s-todo','In Progress':'s-ip','Pending':'s-pending','On Hold':'s-hold','Review':'s-review','Completed':'s-done','Cancelled':'s-cancelled'}[s]||'';}
 function PSC(s){return {'Active CR':'b-ip','In Progress':'b-ip','On Hold':'b-hold','Maintenance':'b-hold','Cancelled':'b-cancelled','Completed':'b-done'}[s]||'b-hold';}
 function myProjects(uid){return AP.filter(p=>p.assigned_ba_id===uid||p.secondary_ba_id===uid||p.supervising_ba_id===uid);}
-function wlScore(tasks){ return tasks.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)).reduce((s,t)=>s+(getWeight(t.task_type)*getPriorityMultiplier(t.priority||'Medium')),0); }
-// Tasks counted in workload display — excludes Completed, Cancelled, On Hold
-function wlActiveTasks(tasks){ return tasks.filter(t=>!['Completed','Cancelled','On Hold'].includes(t.status)); }
+// Status modifiers — configurable via Task Settings (stored in WS)
+function getStatusMultiplier(status){
+  const defaults={'In Progress':1.0,'To Do':1.0,'Pending':0.5,'Review':0.5};
+  const keys={'In Progress':'status_mult_in_progress','To Do':'status_mult_to_do','Pending':'status_mult_pending','Review':'status_mult_review'};
+  const k=keys[status];
+  if(!k) return 0; // On Hold, Cancelled, Completed → excluded
+  const stored=parseFloat(WS[k]);
+  return isNaN(stored)?defaults[status]:stored;
+}
+// Only statuses with non-zero multiplier count toward workload score
+function wlScore(tasks){ return tasks.reduce((s,t)=>{ const sm=getStatusMultiplier(t.status); return sm>0?s+(getWeight(t.task_type)*getPriorityMultiplier(t.priority||'Medium')*sm):s; },0); }
+// Active tasks for display — only To Do and In Progress (full weight statuses)
+function wlActiveTasks(tasks){ return tasks.filter(t=>['To Do','In Progress'].includes(t.status)); }
 function getWeight(type){ return parseInt(WS['weight_'+type.toLowerCase().replace(/[^a-z]/g,'_')]||WS['weight_default']||W_WEIGHTS[type]||W_DEFAULT); }
 function wlStatus(score){
   const gm = parseInt(WS.green_max||14), am = parseInt(WS.amber_max||25);
@@ -1184,19 +1195,19 @@ function buildTT(tasks,filter,baId,canEdit) {
         : `<td><span class="badge ${SC(t.status)?'b-'+SC(t.status).replace('s-',''):''}" style="font-size:10px">${t.status}</span></td>`;
     return `<tr id="row-${t.id}" ${isLocked?'class="task-locked"':''}>
       ${ba}
-      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${(t.created_at||'').slice(0,10)||'—'}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${fmtDate((t.created_at||'').slice(0,10))||'—'}</td>
       <td style="font-weight:500;max-width:120px">${t.project_name}${od?` <span class="fp fpl">LATE</span>`:''}${!od&&t.was_late&&!['Completed','Cancelled'].includes(t.status)?` <span class="fp fpl" title="Was late when moved to review">LATE ↩</span>`:''}${almostDue&&!od?` <span class="fp fpd">DUE SOON</span>`:''}${startAlert?` <span class="fp" style="background:rgba(77,166,255,0.15);color:var(--blue)">START</span>`:''}</td>
       <td style="font-size:10.5px;color:var(--text2)">${t.task_type}</td>
       <td>${priorityBadge(t.priority||'Medium')}</td>
       <td style="color:var(--text2);max-width:180px;font-size:11px">${t.description}${reworkBadge}</td>
-      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${t.start_date||'—'}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3)">${fmtDate(t.start_date)}</td>
       <td style="font-family:var(--mono);font-size:10px;${od?'color:var(--red);font-weight:500':'color:var(--text2)'}">
-        ${t.eta||'—'}
+        ${fmtDate(t.eta)}
         ${t.eta_edit_count>0?('<span style="background:var(--abg);color:var(--amber);font-size:8.5px;font-weight:700;padding:1px 4px;border-radius:6px;margin-left:3px" title="ETA changed '+t.eta_edit_count+'x">✎'+t.eta_edit_count+'</span>'):''}
       </td>
       ${statusCell}
       <td>${proofLink}</td>
-      <td style="white-space:nowrap;display:flex;gap:3px">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</td>
+      <td style="white-space:nowrap;vertical-align:middle"><div style="display:flex;gap:3px;align-items:center">${remarksBtn}${histBtn}${edit}${overrideBtn}${del}</div></td>
     </tr>
     <tr id="remarks-row-${t.id}" style="display:none"><td colspan="11" style="padding:0 8px 10px 8px"><div id="remarks-${t.id}"></div></td></tr>`;
   }).join('');
@@ -1837,7 +1848,7 @@ async function renderWorkload(){
     const today=new Date(); const soon=new Date(); soon.setDate(soon.getDate()+3);
     // At risk = To Do/In Progress tasks with ETA within 3 calendar days (not yet late)
     const atRisk=ut.filter(t=>['To Do','In Progress'].includes(t.status)&&t.eta&&new Date(t.eta)<=soon&&new Date(t.eta)>=today).length;
-    const vhCount=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status)&&t.priority==='Very High').length;
+    const vhCount=ut.filter(t=>['To Do','In Progress'].includes(t.status)&&t.priority==='Very High').length;
     const assignable=od>0||score>am?'no':score>gm||atRisk>0||vhCount>1?'check':'yes';
     return{...u,score,st,active,od,tasks:activeTasks.length,atRisk,vhCount,assignable};
   }).sort((a,b)=>b.score-a.score);
@@ -1869,7 +1880,7 @@ async function renderWorkload(){
       <div style="font-size:10.5px;color:var(--text3);margin-bottom:1rem;padding:5px 8px;background:var(--surface2);border-radius:var(--rs);border-left:2px solid var(--amber)">
         ⚠ <strong style="color:var(--amber)">At risk</strong> = In Progress tasks with ETA within the next 3 days · 
         🔴 <strong style="color:var(--red)">Late</strong> = In Progress tasks past their ETA ·
-        <span style="color:var(--text3)">Score excludes On Hold, Cancelled &amp; Completed tasks · Click any row to view their tasks</span>
+        <span style="color:var(--text3)">In Progress &amp; To Do = full weight · Pending &amp; Review = half weight · On Hold, Cancelled &amp; Completed excluded · Click any row to view their tasks</span>
       </div>
       ${scores.map(s=>{
         const pct=Math.min(s.score/maxScore*100,100);
@@ -1918,7 +1929,7 @@ function toggleWLBaTasks(baId){
   if(isOpen){return;} // was open — just close it
   // Build task list
   const allT=window._wlAllTasks||[];
-  const baTasks=allT.filter(t=>t.ba_id===baId&&!['Completed','Cancelled'].includes(t.status)).sort((a,b)=>{
+  const baTasks=allT.filter(t=>t.ba_id===baId&&['To Do','In Progress'].includes(t.status)).sort((a,b)=>{
     const po={'Very High':0,'High':1,'Medium':2,'Low':3};
     return (po[a.priority||'Medium']||2)-(po[b.priority||'Medium']||2);
   });
@@ -1937,7 +1948,7 @@ function toggleWLBaTasks(baId){
         <td style="font-size:10px;color:var(--text2)">${t.task_type}</td>
         <td>${priorityBadge(t.priority||'Medium')}</td>
         <td style="font-size:10.5px;color:var(--text2);max-width:200px">${t.description}</td>
-        <td style="font-family:var(--mono);font-size:10px;${etaStyle}">${t.eta||'—'}</td>
+        <td style="font-family:var(--mono);font-size:10px;${etaStyle}">${fmtDate(t.eta)}</td>
         <td>${statusBadge}</td>
       </tr>`;
     }).join('');
@@ -1989,7 +2000,7 @@ async function exportTasksToExcel(){
   const {data:allTasks}=await sb.from('tasks').select('*');
   const summaryRows=visibleAU().map(u=>{
     const ut=(allTasks||[]).filter(t=>t.ba_id===u.id);
-    const active=ut.filter(t=>['To Do','In Progress','Pending','Review'].includes(t.status));
+    const active=ut.filter(t=>['To Do','In Progress'].includes(t.status));
     const score=wlScore(active);
     const st=wlStatus(score);
     const od=active.filter(t=>OD(t.eta,t.status)).length;
@@ -2067,7 +2078,7 @@ async function buildAIContext(){
     const od=ut.filter(t=>OD(t.eta,t.status));
     const pend=ut.filter(t=>t.status==='Pending');
     const hold=ut.filter(t=>t.status==='On Hold');
-    return{name:u.name,role:roleName(),score,status:st.label,activeCount:ut.filter(t=>t.status==='In Progress').length,overdueCount:od.length,overdueItems:od.map(t=>t.project_name+': '+t.description).slice(0,3),pendingCount:pend.length,holdCount:hold.length,longPending:pend.filter(t=>DD(t.created_at,new Date().toISOString())>14).map(t=>t.project_name+': '+t.description).slice(0,2)};
+    return{name:u.name,score,status:st.label,activeCount:ut.filter(t=>t.status==='In Progress').length,todoCount:ut.filter(t=>t.status==='To Do').length,overdueCount:od.length,overdueItems:od.map(t=>t.project_name+': '+t.description).slice(0,3),pendingCount:pend.length,holdCount:hold.length,longPending:pend.filter(t=>DD(t.created_at,new Date().toISOString())>14).map(t=>t.project_name+': '+t.description).slice(0,2)};
   });
   const projSummary=AP.map(p=>{
     const assigned=AU.find(u=>u.id===p.assigned_ba_id)?.name||'Unassigned';
@@ -2075,7 +2086,40 @@ async function buildAIContext(){
     const odCount=projTasks.filter(t=>OD(t.eta,t.status)).length;
     return`${p.name} [${p.status}] — BA: ${assigned} — ${projTasks.length} tasks — ${odCount} overdue`;
   }).slice(0,20).join('\n');
-  return`You are an AI advisor helping a BA team manager at MyEG. Here is current team data:\n\nTEAM WORKLOAD (complexity-weighted):\n${scores.map(s=>`${s.name}: ${s.score}pts (${s.status}) — ${s.activeCount} active, ${s.overdueCount} overdue, ${s.pendingCount} pending${s.longPending.length?' — LONG PENDING: '+s.longPending.join('; '):''}`).join('\n')}\n\nACTIVE PROJECTS:\n${projSummary}\n\nThresholds: Available=0-${WS.green_max||14}pts, Busy=${parseInt(WS.green_max||14)+1}-${WS.amber_max||25}pts, Overloaded=${parseInt(WS.amber_max||25)+1}+pts\n\nRespond concisely and specifically. Reference actual names and project names. Be direct and actionable.`;
+  return`TEAM WORKLOAD:\n${scores.map(s=>`${s.name}: ${Math.round(s.score*10)/10}pts (${s.status}) — ${s.activeCount} in progress, ${s.todoCount} to do, ${s.overdueCount} overdue, ${s.pendingCount} pending${s.longPending.length?' — LONG PENDING: '+s.longPending.join('; '):''}`).join('\n')}\n\nACTIVE PROJECTS:\n${projSummary}\n\nThresholds: Available=0-${WS.green_max||14}pts, Busy=${parseInt(WS.green_max||14)+1}-${WS.amber_max||25}pts, Overloaded=${parseInt(WS.amber_max||25)+1}+pts\nToday: ${new Date().toLocaleDateString('en-MY')}`;
+}
+
+function buildSystemPrompt(ctx){
+  const custom=localStorage.getItem('ai_system_prompt')||'';
+  const base=custom.trim()||`You are an AI advisor embedded in a BA (Business Analyst) team management tool at MyEG. Help the team manager make smart decisions on workload, assignments, project risks, and team capacity.
+
+RESPONSE RULES — follow strictly:
+1. Always use bullet points or numbered lists for multi-item answers
+2. **Bold** key names, numbers, deadlines, and action items
+3. Keep sentences short and direct — no filler like "certainly" or "great question"
+4. For complex answers, use clear section headers like **Summary**, **Risks**, **Actions**
+5. Lead with the most critical finding first
+6. Always reference actual BA names, project names, and point values from the data
+7. When recommending actions, be specific: who, which task, by when
+8. If something is outside team management scope, redirect politely`;
+  return `${base}
+
+SCORING NOTE: Workload score = task_type_weight x priority_multiplier x status_modifier. In Progress & To Do = full weight; Pending & Review = half weight; On Hold/Cancelled/Completed excluded.
+
+LIVE TEAM DATA:
+${ctx}`;
+}
+
+function renderMarkdown(text){
+  return text
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^### (.+)$/gm,'<div style="font-size:12px;font-weight:700;margin:10px 0 3px;color:var(--text1)">$1</div>')
+    .replace(/^## (.+)$/gm,'<div style="font-size:13px;font-weight:700;margin:12px 0 4px;color:var(--text1)">$1</div>')
+    .replace(/^• (.+)$/gm,'<div style="display:flex;gap:6px;margin:2px 0;line-height:1.5"><span style="color:var(--accent);flex-shrink:0;margin-top:1px">•</span><span>$1</span></div>')
+    .replace(/^- (.+)$/gm,'<div style="display:flex;gap:6px;margin:2px 0;line-height:1.5"><span style="color:var(--accent);flex-shrink:0;margin-top:1px">•</span><span>$1</span></div>')
+    .replace(/^(\d+)\. (.+)$/gm,'<div style="display:flex;gap:6px;margin:2px 0;line-height:1.5"><span style="color:var(--accent);font-weight:600;flex-shrink:0;min-width:16px">$1.</span><span>$2</span></div>')
+    .replace(/\n{2,}/g,'<div style="margin:5px 0"></div>')
+    .replace(/\n/g,'<br>');
 }
 
 async function callAI(systemPrompt, messages, maxTokens=1000){
@@ -2148,28 +2192,30 @@ function aiProviderLabel(){
 
 async function loadInsights(){
   if(!getActiveAIKey()){
-    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3)">Set your ${aiProviderLabel()} API key in <strong>Settings → AI Advisor</strong> to enable insights.</div>`;
+    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3)">Set your ${aiProviderLabel()} API key in <strong>Settings \u2192 AI Advisor</strong> to enable insights.</div>`;
     return;
   }
   document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><div class="sp"></div> Analysing your team...</div>`;
   const ctx=await buildAIContext();
   try{
     const text=await callAI(
-      ctx+'\n\nGenerate 4 proactive insights as JSON array. Each: {type:"warning"|"info"|"success"|"tip", icon:"⚠"|"💡"|"✓"|"→", title:string, body:string}. Return ONLY valid JSON array, no markdown.',
-      [{role:'user',content:'Generate insights now.'}],
-      800
+      `You are a BA team workload analyser. Analyse the data and return ONLY a raw JSON array — no markdown fences, no explanation, no extra text before or after.\n\nData:\n${ctx}`,
+      [{role:'user',content:'Return a JSON array of exactly 4 objects. Each must have: "type" ("warning","info","success","tip"), "icon" ("\u26a0","\ud83d\udca1","\u2713","\u2192"), "title" (max 8 words), "body" (2 concise sentences using actual names/numbers). Start your response with [ and end with ].'}],
+      1000
     );
-    const clean=text.replace(/```json|```/g,'').trim();
-    const insights=JSON.parse(clean);
+    const match=text.match(/\[[\s\S]*\]/);
+    if(!match)throw new Error('Invalid response format');
+    const insights=JSON.parse(match[0]);
     const colors={warning:'var(--rbg)',info:'var(--bbg)',success:'var(--gbg)',tip:'var(--ag)'};
     const tc={warning:'var(--red)',info:'var(--blue)',success:'var(--green)',tip:'var(--accent)'};
     document.getElementById('aiInsights').innerHTML=insights.map(i=>`
       <div class="aiins">
         <div class="aiico" style="background:${colors[i.type]||'var(--ag)'}"><span style="color:${tc[i.type]||'var(--accent)'}">${i.icon}</span></div>
-        <div class="aitext"><strong>${i.title}</strong><br>${i.body}</div>
+        <div class="aitext"><strong>${i.title}</strong><br><span style="color:var(--text2);font-size:11.5px">${i.body}</span></div>
       </div>`).join('');
   }catch(e){
-    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load insights. ${e.message==='no_key'?'Set your API key in Settings.':'Check your API key and connection.'}</div>`;
+    console.error('Insights error:',e);
+    document.getElementById('aiInsights').innerHTML=`<div style="font-size:12px;color:var(--red)">Could not load insights. ${e.message==='no_key'?'Set your API key in Settings.':'Check your API key and connection. ('+e.message+')'}</div>`;
   }
 }
 
@@ -2177,7 +2223,8 @@ function addChatMsg(role,text){
   const msgs=document.getElementById('chatMsgs');
   const isAI=role==='ai';
   const av=isAI?`<div class="cav" style="background:var(--ag);color:var(--accent)">AI</div>`:`<div class="cav" style="background:var(--surface3);color:var(--text2)">${INI(CU.name)}</div>`;
-  const bubble=`<div class="cb">${text.replace(/\n/g,'<br>')}</div>`;
+  const rendered=isAI&&text&&!text.includes('tdot')?renderMarkdown(text):text;
+  const bubble=`<div class="cb" style="${isAI?'line-height:1.55;font-size:12.5px':''}">${rendered}</div>`;
   const div=document.createElement('div');
   div.className=`cm ${isAI?'ai':'u'}`;
   div.innerHTML=isAI?`${av}${bubble}`:`${bubble}${av}`;
@@ -2199,8 +2246,8 @@ async function sendChat(){
   const typDiv=addChatMsg('ai','<span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>');
   try{
     const ctx=await buildAIContext();
-    const reply=await callAI(ctx,chatHistory,1000);
-    typDiv.querySelector('.cb').innerHTML=reply.replace(/\n/g,'<br>');
+    const reply=await callAI(buildSystemPrompt(ctx),chatHistory,1500);
+    typDiv.querySelector('.cb').innerHTML=renderMarkdown(reply);
     chatHistory.push({role:'assistant',content:reply});
   }catch(e){
     typDiv.querySelector('.cb').innerHTML='Error connecting to AI. Check your API key in Settings.';
@@ -3856,6 +3903,28 @@ async function renderSettings(){
       <button class="btn btn-a btn-sm" onclick="savePriorityMultipliers()">Save multipliers</button>
     </div>
     <div class="card">
+      <div class="ct">Status weight modifiers <span style="font-size:10px;font-weight:400;color:var(--text3)">(fraction of full score counted per status)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:.85rem">
+        ${[
+          {label:'In Progress',k:'status_mult_in_progress',def:1.0},
+          {label:'To Do',k:'status_mult_to_do',def:1.0},
+          {label:'Pending',k:'status_mult_pending',def:0.5},
+          {label:'Review',k:'status_mult_review',def:0.5}
+        ].map(x=>`<div class="ff" style="margin:0">
+          <label class="flb" style="font-size:9.5px">${x.label}</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" class="finp" id="ws_${x.k}" value="${WS[x.k]!=null?WS[x.k]:x.def}" min="0" max="1" step="0.05" style="max-width:70px;padding:4px 8px;font-size:12px">
+            <span style="font-size:10px;color:var(--text3)">${x.def===1.0?'full':'half'} weight</span>
+          </div>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:.6rem .75rem;margin-bottom:.75rem;font-size:11px;color:var(--text2)">
+        <span style="color:var(--amber);margin-top:1px">ⓘ</span>
+        <span>On Hold, Cancelled &amp; Completed are always <strong>excluded (0)</strong> and cannot be configured. Set to <strong>0</strong> to fully exclude a status, <strong>1</strong> for full weight, or anything in between.</span>
+      </div>
+      <button class="btn btn-a btn-sm" onclick="saveStatusMultipliers()">Save status modifiers</button>
+    </div>
+    <div class="card">
       <div class="ct">AI Advisor — provider &amp; API key</div>
       <div class="fhint" style="margin-bottom:.85rem">Your API keys are saved only in this browser and never sent to our servers. Select which AI provider to use for the AI Advisor.</div>
       <div class="ff" style="max-width:340px">
@@ -3869,6 +3938,19 @@ async function renderSettings(){
       </div>
       <div id="aiKeyFields"></div>
       <button class="btn btn-a btn-sm" style="margin-top:4px" onclick="saveAIConfig()">Save AI config</button>
+    </div>
+    <div class="card">
+      <div class="ct">AI Advisor — system prompt <span style="font-size:10px;font-weight:400;color:var(--text3)">(custom instructions for the AI)</span></div>
+      <div class="fhint" style="margin-bottom:.5rem">Customise how the AI responds — tone, focus areas, extra rules. The live team data is always injected automatically on top of this. Leave blank to use the default prompt.</div>
+      <textarea class="fta" id="ws_ai_system_prompt" style="min-height:180px;font-size:12px;font-family:var(--mono);line-height:1.6" placeholder="e.g. Always respond in Bahasa Malaysia. Focus on overdue tasks first. Flag any BA with more than 5 active tasks immediately.">${localStorage.getItem('ai_system_prompt')||''}</textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:.6rem;flex-wrap:wrap">
+        <button class="btn btn-a btn-sm" onclick="saveSystemPrompt()">Save prompt</button>
+        <button class="btn btn-sm btn-g" onclick="resetSystemPrompt()">Reset to default</button>
+        <span id="systemPromptStatus" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div style="margin-top:.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:.6rem .75rem;font-size:11px;color:var(--text2)">
+        <strong style="color:var(--text1)">Default prompt includes:</strong> bullet point formatting, bold key names, section headers, reference actual names/scores, lead with critical findings, specific actionable recommendations.
+      </div>
     </div>
     <div class="card" style="border:1px solid var(--red);background:var(--rbg)">
       <div class="ct" style="color:var(--red)">⚠ Danger zone</div>
@@ -3940,6 +4022,31 @@ async function savePriorityMultipliers(){
   }
   await loadBase();
   notify('Settings saved','Priority multipliers updated','success');
+}
+
+async function saveStatusMultipliers(){
+  const keys=['status_mult_in_progress','status_mult_to_do','status_mult_pending','status_mult_review'];
+  for(const k of keys){
+    const val=document.getElementById(`ws_${k}`)?.value;
+    if(val!==undefined&&val!=='') await sb.from('workload_settings').upsert({key:k,value:val});
+  }
+  await loadBase();
+  notify('Settings saved','Status weight modifiers updated','success');
+}
+
+function saveSystemPrompt(){
+  const val=document.getElementById('ws_ai_system_prompt')?.value||'';
+  localStorage.setItem('ai_system_prompt',val.trim());
+  const status=document.getElementById('systemPromptStatus');
+  if(status){status.textContent='✓ Saved';status.style.color='var(--green)';setTimeout(()=>{status.textContent='';},2500);}
+}
+
+function resetSystemPrompt(){
+  localStorage.removeItem('ai_system_prompt');
+  const ta=document.getElementById('ws_ai_system_prompt');
+  if(ta)ta.value='';
+  const status=document.getElementById('systemPromptStatus');
+  if(status){status.textContent='✓ Reset to default';status.style.color='var(--text3)';setTimeout(()=>{status.textContent='';},2500);}
 }
 
 async function saveThresholds(){
