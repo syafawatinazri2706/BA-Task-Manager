@@ -2090,8 +2090,9 @@ async function buildAIContext(){
 }
 
 function buildSystemPrompt(ctx){
-  const custom=localStorage.getItem('ai_system_prompt')||'';
-  const base=custom.trim()||`You are an AI advisor embedded in a BA (Business Analyst) team management tool at MyEG. Help the team manager make smart decisions on workload, assignments, project risks, and team capacity.
+  const raw=localStorage.getItem('ai_system_prompt')||'';
+  const custom=raw.trim();
+  const base=custom||`You are an AI advisor embedded in a BA (Business Analyst) team management tool at MyEG. Help the team manager make smart decisions on workload, assignments, project risks, and team capacity.
 
 RESPONSE RULES — follow strictly:
 1. Always use bullet points or numbered lists for multi-item answers
@@ -2102,12 +2103,9 @@ RESPONSE RULES — follow strictly:
 6. Always reference actual BA names, project names, and point values from the data
 7. When recommending actions, be specific: who, which task, by when
 8. If something is outside team management scope, redirect politely`;
-  return `${base}
-
-SCORING NOTE: Workload score = task_type_weight x priority_multiplier x status_modifier. In Progress & To Do = full weight; Pending & Review = half weight; On Hold/Cancelled/Completed excluded.
-
-LIVE TEAM DATA:
-${ctx}`;
+  return base
+    + '\n\nSCORING NOTE: Workload score = task_type_weight x priority_multiplier x status_modifier. In Progress & To Do = full weight; Pending & Review = half weight; On Hold/Cancelled/Completed excluded.'
+    + '\n\nLIVE TEAM DATA:\n' + ctx;
 }
 
 function renderMarkdown(text){
